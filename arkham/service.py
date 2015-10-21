@@ -5,7 +5,6 @@ __author__ = 'johnxu'
 __date__ = '10/21/2015 11:38 AM'
 
 
-import sys
 import logging
 import functools
 
@@ -29,6 +28,8 @@ class ArkhamService(object):
     CONNECTIONS = {}
 
     role_name = '__unknown__'
+    connection = None
+    channel = None
 
     @classmethod
     def init_config(cls, config):
@@ -46,8 +47,13 @@ class ArkhamService(object):
         assert service_name in cls.CONFIG, 'no proper config for instance: `%s`' % service_name
         conf = cls.CONFIG[service_name]
 
-        assert conf['role'] == cls.role_name, 'invalid role, plz use `%s`' % cls.REGISTRY[conf['role']].__name__
-        return cls.build_instance(service_name, conf)
+        if cls is not ArkhamService:
+            assert conf['role'] == cls.role_name, \
+                'invalid role, plz use `%s`' % cls.REGISTRY[conf['role']].__name__
+
+            return cls.build_instance(service_name, conf)
+        else:
+            return cls.REGISTRY[conf['role']].build_instance(service_name, conf)
 
     @classmethod
     def build_instance(cls, service_name, conf):
@@ -88,40 +94,36 @@ class ArkhamService(object):
         self.name = name
         self.conf = conf
         self.connection = self.get_connection(name, conf)
+        self.channel = self.connection.channel()
         self.initialize()
 
     def initialize(self):
         pass
 
-    def make_channel(self, no_context=False):
+    def make_channel(self):
         """
         :rtype: BlockingChannel
         """
         try:
             channel = self.connection.channel()
         except (KeyError, pika.exceptions.ConnectionClosed):
-            LOGGER.info('connection closed for `%s`', self.name)
+            LOGGER.info('Connection closed for `%s`', self.name)
             self.connection = self.get_connection(self.name, self.conf, force_instance=True)
             channel = self.connection.channel()
 
-        if no_context:
-            return channel
-
-        return ChannelContext(channel)
+        return channel
 
 
-class ChannelContext(object):
-    def __init__(self, channel_obj):
-        """
-        :type channel_obj: BlockingChannel
-        """
-        self.channel_obj = channel_obj
+def handle_closed(fn):
+    @functools.wraps(fn)
+    def _wrapper(self, *args, **kwargs):
+        try:
+            return fn(self, *args, **kwargs)
+        except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed):
+            self.channel = self.make_channel()
 
-    def __enter__(self):
-        return self.channel_obj
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.channel_obj.close()
+        return fn(self, *args, **kwargs)
+    return _wrapper
 
 
 class PublishService(ArkhamService):
@@ -132,8 +134,7 @@ class PublishService(ArkhamService):
         if declare_args:
             declare_args['exchange'] = self.conf['exchange']
             declare_args['exchange_type'] = self.conf['exchange_type']
-            with self.make_channel() as channel:
-                channel.exchange_declare(**declare_args or {})
+            self.channel.exchange_declare(**declare_args or {})
 
     def publish(self, body, properties=None, mandatory=False, immediate=False, routing_key=None):
         """Publish to the channel with the given exchange, routing key and body.
@@ -149,33 +150,12 @@ class PublishService(ArkhamService):
         :param bool mandatory: The mandatory flag
         :param bool immediate: The immediate flag
         """
-        with self.make_channel() as channel:
-            return channel.basic_publish(
-                exchange=self.conf['exchange'],
-                routing_key=routing_key or self.conf['bind'],
-                body=body, properties=properties,
-                mandatory=mandatory, immediate=immediate,
-            )
-
-
-def handle_closed_channel(times=3):
-    def _decorator(fn):
-        @functools.wraps(fn)
-        def _wrapper(self, *args, **kwargs):
-            i = 0
-            exc_info = None, None, None
-            while i < times:
-                try:
-                    return fn(self, *args, **kwargs)
-                except pika.exceptions.ChannelClosed:
-                    i += 1
-                    exc_info = sys.exc_info()
-                    self.channel = self.make_channel(no_context=True)
-
-            raise exc_info[0], exc_info[1], exc_info[2]
-
-        return _wrapper
-    return _decorator
+        return self.channel.basic_publish(
+            exchange=self.conf['exchange'],
+            routing_key=routing_key or self.conf['bind'],
+            body=body, properties=properties,
+            mandatory=mandatory, immediate=immediate,
+        )
 
 
 class SubscribeService(ArkhamService):
@@ -183,25 +163,38 @@ class SubscribeService(ArkhamService):
     channel = None
 
     def initialize(self):
-        self.channel = channel = self.make_channel(no_context=True)
-
         declare_args = self.conf.get('queue_declare_args', {})
         if declare_args:
             if 'queue_name' in declare_args:
                 declare_args['queue'] = self.conf['queue_name']
 
-            method = channel.queue_declare(**declare_args or {})
+            method = self.channel.queue_declare(**declare_args or {})
             self.conf['queue_name'] = method.method.queue
         else:
-            channel.queue_declare(self.conf['queue_name'], passive=True)
+            self.channel.queue_declare(self.conf['queue_name'], passive=True)
 
         if self.conf.get('bind'):
-            channel.queue_bind(self.conf['queue'], self.conf['exchange'], self.conf['bind'])
+            self.channel.queue_bind(self.conf['queue'], self.conf['exchange'], self.conf['bind'])
 
-    @handle_closed_channel(times=3)
-    def get_message(self, no_ack=False):
+    @handle_closed
+    def basic_get(self, no_ack=False):
+        """Get a single message from the AMQP broker. Returns a sequence with
+        the method frame, message properties, and body.
+
+        :param bool no_ack: Tell the broker to not expect a reply
+        :returns: a three-tuple; (None, None, None) if the queue was empty;
+            otherwise (method, properties, body); NOTE: body may be None
+        :rtype: (None, None, None)|(spec.Basic.GetOk,
+                                    spec.BasicProperties,
+                                    str or unicode or None)
+        """
         return self.channel.basic_get(self.conf['queue_name'], no_ack=no_ack)
 
+    def get_message(self, no_ack=False):
+        method, props, payload = self.basic_get(no_ack=no_ack)
+        return payload
+
+    @handle_closed
     def consume(self, no_ack=False, exclusive=False,
                 arguments=None, inactivity_timeout=None):
         return self.channel.consume(
