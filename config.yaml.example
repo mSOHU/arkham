@@ -5,10 +5,10 @@ service_name:
   host:  # defaults to 127.0.0.1
   port:  # defaults to 5672
   vhost: /  # defaults to /
-  bind: bind  # if role is broadcast or publish, bind is the routing key
+  bind_key: bind  # if role is broadcast or publish, bind is the routing key
   queue_name:  # if role is subscribe, queue_name is optional, defaults to random string
   queue_declare_args:  # dict, defaults to no args
-  role: broadcast | subscribe | publish
+  service_role: broadcast | subscribe | publish
   user: guest
   passwd: guest
   type: tornado | blocking

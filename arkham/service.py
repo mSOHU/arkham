@@ -27,7 +27,7 @@ class ArkhamService(object):
     CONFIG = {}
     CONNECTIONS = {}
 
-    role_name = '__unknown__'
+    service_role = '__unknown__'
     connection = None
     channel = None
 
@@ -37,23 +37,24 @@ class ArkhamService(object):
             with open(config, 'rb') as fp:
                 config = yaml.load(fp)
 
-        cls.CONFIG = config
+        ArkhamService.CONFIG = config
 
     @classmethod
     def get_instance(cls, service_name):
-        if not cls.REGISTRY:
-            cls.REGISTRY = {klz.service_role: klz for klz in cls.__subclasses__()}
+        base_cls = ArkhamService
+        if not base_cls.REGISTRY:
+            base_cls.REGISTRY = {klz.service_role: klz for klz in base_cls.__subclasses__()}
 
-        assert service_name in cls.CONFIG, 'no proper config for instance: `%s`' % service_name
-        conf = cls.CONFIG[service_name]
+        assert service_name in base_cls.CONFIG, 'no proper config for instance: `%s`' % service_name
+        conf = base_cls.CONFIG[service_name]
 
         if cls is not ArkhamService:
-            assert conf['role'] == cls.role_name, \
-                'invalid role, plz use `%s`' % cls.REGISTRY[conf['role']].__name__
+            assert conf['service_role'] == cls.service_role, \
+                'invalid role, plz use `%s`' % base_cls.REGISTRY[conf['service_role']].__name__
 
             return cls.build_instance(service_name, conf)
         else:
-            return cls.REGISTRY[conf['role']].build_instance(service_name, conf)
+            return base_cls.REGISTRY[conf['service_role']].build_instance(service_name, conf)
 
     @classmethod
     def build_instance(cls, service_name, conf):
@@ -127,7 +128,7 @@ def handle_closed(fn):
 
 
 class PublishService(ArkhamService):
-    role_name = 'publish'
+    service_role = 'publish'
 
     def initialize(self):
         declare_args = self.conf.get('exchange_declare_args', {})
@@ -136,6 +137,7 @@ class PublishService(ArkhamService):
             declare_args['exchange_type'] = self.conf['exchange_type']
             self.channel.exchange_declare(**declare_args or {})
 
+    @handle_closed
     def publish(self, body, properties=None, mandatory=False, immediate=False, routing_key=None):
         """Publish to the channel with the given exchange, routing key and body.
         For more information on basic_publish and what the parameters do, see:
@@ -152,14 +154,14 @@ class PublishService(ArkhamService):
         """
         return self.channel.basic_publish(
             exchange=self.conf['exchange'],
-            routing_key=routing_key or self.conf['bind'],
+            routing_key=routing_key or self.conf['bind_key'],
             body=body, properties=properties,
             mandatory=mandatory, immediate=immediate,
         )
 
 
 class SubscribeService(ArkhamService):
-    role_name = 'subscribe'
+    service_role = 'subscribe'
     channel = None
 
     def initialize(self):
@@ -173,8 +175,8 @@ class SubscribeService(ArkhamService):
         else:
             self.channel.queue_declare(self.conf['queue_name'], passive=True)
 
-        if self.conf.get('bind'):
-            self.channel.queue_bind(self.conf['queue'], self.conf['exchange'], self.conf['bind'])
+        if self.conf.get('bind_key'):
+            self.channel.queue_bind(self.conf['queue'], self.conf['exchange'], self.conf['bind_key'])
 
     @handle_closed
     def basic_get(self, no_ack=False):

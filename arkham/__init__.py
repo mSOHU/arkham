@@ -5,4 +5,4 @@ __author__ = 'johnxu'
 __date__ = '10/21/2015 9:12 AM'
 
 
-from .service import PublishService, SubscribeService
+from .service import PublishService, SubscribeService, ArkhamService
