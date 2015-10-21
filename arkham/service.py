@@ -7,11 +7,12 @@ __date__ = '10/21/2015 11:38 AM'
 
 import sys
 import logging
+import functools
 
+import yaml
 import pika
 import pika.exceptions
 from pika.adapters.blocking_connection import BlockingChannel
-import yaml
 
 
 LOGGER = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class ArkhamService(object):
     def make_connection(cls, conf):
         params = {
             'host': conf.get('host', '127.0.0.1'),
-            'port': conf.get('host', 5672),
+            'port': conf.get('port', 5672),
             'virtual_host': conf.get('vhost', '/'),
         }
         params.update(conf.get('extra_params', {}))
@@ -68,7 +69,7 @@ class ArkhamService(object):
 
         parameters = pika.ConnectionParameters(**params)
         conn_factory = cls.CONNECTION_FACTORIES[conf.get('type', 'blocking')]
-        return conn_factory(parameters, **conf.get('connection_params'))
+        return conn_factory(parameters, **conf.get('connection_params', {}))
 
     @classmethod
     def get_connection(cls, name, conf, force_instance=False):
@@ -87,6 +88,10 @@ class ArkhamService(object):
         self.name = name
         self.conf = conf
         self.connection = self.get_connection(name, conf)
+        self.initialize()
+
+    def initialize(self):
+        pass
 
     def make_channel(self, no_context=False):
         """
@@ -155,12 +160,13 @@ class PublishService(ArkhamService):
 
 def handle_closed_channel(times=3):
     def _decorator(fn):
+        @functools.wraps(fn)
         def _wrapper(self, *args, **kwargs):
             i = 0
             exc_info = None, None, None
             while i < times:
                 try:
-                    return fn(*args, **kwargs)
+                    return fn(self, *args, **kwargs)
                 except pika.exceptions.ChannelClosed:
                     i += 1
                     exc_info = sys.exc_info()
@@ -186,11 +192,15 @@ class SubscribeService(ArkhamService):
 
             method = channel.queue_declare(**declare_args or {})
             self.conf['queue_name'] = method.method.queue
+        else:
+            channel.queue_declare(self.conf['queue_name'], passive=True)
+
+        if self.conf.get('bind'):
             channel.queue_bind(self.conf['queue'], self.conf['exchange'], self.conf['bind'])
 
     @handle_closed_channel(times=3)
     def get_message(self, no_ack=False):
-        return self.channel.basic_get(no_ack=no_ack)
+        return self.channel.basic_get(self.conf['queue_name'], no_ack=no_ack)
 
     def consume(self, no_ack=False, exclusive=False,
                 arguments=None, inactivity_timeout=None):

@@ -1,0 +1,17 @@
+service_name:
+  exchange: exchange_name
+  exchange_type: direct | fanout | topic | headers  # defaults to topic
+  exchange_declare_args:  # dict, defaults to no declare
+  host:  # defaults to 127.0.0.1
+  port:  # defaults to 5672
+  vhost: /  # defaults to /
+  bind: bind  # if role is broadcast or publish, bind is the routing key
+  queue_name:  # if role is subscribe, queue_name is optional, defaults to random string
+  queue_declare_args:  # dict, defaults to no args
+  role: broadcast | subscribe | publish
+  user: guest
+  passwd: guest
+  type: tornado | blocking
+  strategy: channel | connection  # defaults to one channel pre instance
+  extra_params: # applies in ConnectionParameters
+  connection_params: # applies while build Connection object
