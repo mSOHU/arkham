@@ -162,7 +162,6 @@ class PublishService(ArkhamService):
 
 class SubscribeService(ArkhamService):
     service_role = 'subscribe'
-    channel = None
 
     def initialize(self):
         declare_args = self.conf.get('queue_declare_args', {})
@@ -192,9 +191,17 @@ class SubscribeService(ArkhamService):
         """
         return self.channel.basic_get(self.conf['queue_name'], no_ack=no_ack)
 
-    def get_message(self, no_ack=False):
+    def get_message(self, no_ack=True):
         method, props, payload = self.basic_get(no_ack=no_ack)
-        return payload
+
+        if no_ack:
+            return payload
+        else:
+            return method and method.delivery_tag, payload
+
+    @handle_closed
+    def acknowledge(self, delivery_tag, multiple=False):
+        return self.channel.basic_ack(delivery_tag=delivery_tag, multiple=multiple)
 
     @handle_closed
     def consume(self, no_ack=False, exclusive=False,
