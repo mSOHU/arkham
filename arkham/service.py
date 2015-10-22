@@ -192,6 +192,14 @@ class SubscribeService(ArkhamService):
         return self.channel.basic_get(self.conf['queue_name'], no_ack=no_ack)
 
     def get_message(self, no_ack=True):
+        """Get a single message from the AMQP broker. Returns a sequence with
+        the method frame, message properties, and body.
+
+        :param bool no_ack: Tell the broker to not expect a reply
+        :returns: a three-tuple; (None, None) if the queue was empty;
+            otherwise (method, properties, body); NOTE: body may be None
+        :rtype: (None, None)|(delivery_tag, str or unicode or None)
+        """
         method, props, payload = self.basic_get(no_ack=no_ack)
 
         if no_ack:
@@ -201,11 +209,64 @@ class SubscribeService(ArkhamService):
 
     @handle_closed
     def acknowledge(self, delivery_tag, multiple=False):
+        """Acknowledge one or more messages. When sent by the client, this
+        method acknowledges one or more messages delivered via the Deliver or
+        Get-Ok methods. When sent by server, this method acknowledges one or
+        more messages published with the Publish method on a channel in
+        confirm mode. The acknowledgement can be for a single message or a
+        set of messages up to and including a specific message.
+
+        :param int delivery-tag: The server-assigned delivery tag
+        :param bool multiple: If set to True, the delivery tag is treated as
+                              "up to and including", so that multiple messages
+                              can be acknowledged with a single method. If set
+                              to False, the delivery tag refers to a single
+                              message. If the multiple field is 1, and the
+                              delivery tag is zero, this indicates
+                              acknowledgement of all outstanding messages.
+        """
         return self.channel.basic_ack(delivery_tag=delivery_tag, multiple=multiple)
 
     @handle_closed
     def consume(self, no_ack=False, exclusive=False,
                 arguments=None, inactivity_timeout=None):
+        """Blocking consumption of a queue instead of via a callback. This
+        method is a generator that yields each message as a tuple of method,
+        properties, and body. The active generator iterator terminates when the
+        consumer is cancelled by client or broker.
+
+        Example:
+
+            for method, properties, body in channel.consume('queue'):
+                print body
+                channel.basic_ack(method.delivery_tag)
+
+        You should call `BlockingChannel.cancel()` when you escape out of the
+        generator loop.
+
+        If you don't cancel this consumer, then next call on the same channel
+        to `consume()` with the exact same (queue, no_ack, exclusive) parameters
+        will resume the existing consumer generator; however, calling with
+        different parameters will result in an exception.
+
+        :param bool no_ack: Tell the broker to not expect a ack/nack response
+        :param bool exclusive: Don't allow other consumers on the queue
+        :param dict arguments: Custom key/value pair arguments for the consumer
+        :param float inactivity_timeout: if a number is given (in
+            seconds), will cause the method to yield None after the given period
+            of inactivity; this permits for pseudo-regular maintenance
+            activities to be carried out by the user while waiting for messages
+            to arrive. If None is given (default), then the method blocks until
+            the next event arrives. NOTE that timing granularity is limited by
+            the timer resolution of the underlying implementation.
+            NEW in pika 0.10.0.
+
+        :yields: tuple(spec.Basic.Deliver, spec.BasicProperties, str or unicode)
+
+        :raises ValueError: if consumer-creation parameters don't match those
+            of the existing queue consumer generator, if any.
+            NEW in pika 0.10.0
+        """
         return self.channel.consume(
             self.conf['queue_name'], no_ack=no_ack, exclusive=exclusive,
             arguments=arguments, inactivity_timeout=inactivity_timeout
