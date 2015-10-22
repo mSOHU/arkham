@@ -1,17 +1,49 @@
-service_name:
-  exchange: exchange_name
-  exchange_type: direct | fanout | topic | headers  # defaults to topic
-  exchange_declare_args:  # dict, defaults to no declare
+publish_service:
   host:  # defaults to 127.0.0.1
   port:  # defaults to 5672
   vhost: /  # defaults to /
-  bind_key: bind  # if role is broadcast or publish, bind is the routing key
-  queue_name:  # if role is subscribe, queue_name is optional, defaults to random string
-  queue_declare_args:  # dict, defaults to no args
-  service_role: broadcast | subscribe | publish
   user: guest
   passwd: guest
-  type: tornado | blocking
+  exchange: exchange_name
+  routing_key: routing_key
+  service_role: publish
+
+subscribe_service:
+  host:  # defaults to 127.0.0.1
+  port:  # defaults to 5672
+  vhost: /  # defaults to /
+  user: guest
+  passwd: guest
+  service_role: subscribe
+  queue_name:  # optional, defaults to random string
+  exchange: exchange_name  # optional if queue is bound to exchange already
+  routing_key: routing_key  # optional if queue is bound to exchange already
+
+service_full:
+  host:  # defaults to 127.0.0.1
+  port:  # defaults to 5672
+  vhost: /  # defaults to /
+  user: guest
+  passwd: guest
+  exchange: exchange_name
+  routing_key: routing_key
+  service_role: subscribe | publish
+  queue_name:  # if role is subscribe, queue_name is optional, defaults to random string
+  type: blocking
   strategy: channel | connection  # defaults to one channel pre instance
-  extra_params: # applies in ConnectionParameters
-  connection_params: # applies while build Connection object
+  extra_params:  # applies in ConnectionParameters
+  connection_params:  # applies while build Connection object
+  declare:
+    exchange:
+      name: required  # will add `exchange.` prefix
+      type: direct | fanout | topic | headers  # defaults to topic
+      extra_args:  # dict, defaults to no args
+    queue:
+      name: required  # required as of declare
+      passive: True  # defaults to True, for avoiding permission issue
+      extra_args:  # dict, defaults to no args
+      routing_key: bind
+    binds:
+      - exchange:
+        queue_name:
+        routing_key:
