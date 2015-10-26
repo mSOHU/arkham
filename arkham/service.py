@@ -96,10 +96,6 @@ class ArkhamService(object):
         self.conf = conf
         self.connection = self.get_connection(name, conf)
         self.channel = self.connection.channel()
-        self.initialize()
-
-    def initialize(self):
-        pass
 
     def make_channel(self):
         """
@@ -113,6 +109,37 @@ class ArkhamService(object):
             channel = self.connection.channel()
 
         return channel
+
+    def handle_declarations(self):
+        declarations = self.conf.get('declare', {})
+        if not declarations:
+            return
+
+        ensure_prefix = lambda s, prefix: s if s.startswith(prefix) else prefix + s
+
+        exchange = declarations.get('exchange')
+        if exchange:
+            declare_args = {
+                'exchange': ensure_prefix(exchange['name'], 'exchange.'),
+                'exchange_type': exchange.get('type', 'topic'),
+                'passive': exchange.get('passive', True),
+            }
+            declare_args.update(exchange.get('extra_args') or {})
+            self.channel.exchange_declare(**declare_args)
+
+        queue = declarations.get('queue')
+        if queue:
+            declare_args = {
+                'queue': ensure_prefix(queue['name'], 'queue.'),
+                'passive': queue.get('passive', True),
+            }
+            declare_args.update(queue.get('extra_args') or {})
+            self.channel.queue_declare(**declare_args)
+
+        binds = declarations.get('binds')
+        if binds:
+            for bind in binds:
+                self.channel.queue_bind(**bind)
 
 
 def handle_closed(fn):
@@ -129,13 +156,6 @@ def handle_closed(fn):
 
 class PublishService(ArkhamService):
     service_role = 'publish'
-
-    def initialize(self):
-        declare_args = self.conf.get('exchange_declare_args', {})
-        if declare_args:
-            declare_args['exchange'] = self.conf['exchange']
-            declare_args['exchange_type'] = self.conf['exchange_type']
-            self.channel.exchange_declare(**declare_args or {})
 
     @handle_closed
     def publish(self, body, properties=None, mandatory=False, immediate=False, routing_key=None):
@@ -163,19 +183,14 @@ class PublishService(ArkhamService):
 class SubscribeService(ArkhamService):
     service_role = 'subscribe'
 
-    def initialize(self):
-        declare_args = self.conf.get('queue_declare_args', {})
-        if declare_args:
-            if 'queue_name' in declare_args:
-                declare_args['queue'] = self.conf['queue_name']
+    def handle_declarations(self):
+        super(SubscribeService, self).handle_declarations()
 
-            method = self.channel.queue_declare(**declare_args or {})
-            self.conf['queue_name'] = method.method.queue
-        else:
-            self.channel.queue_declare(self.conf['queue_name'], passive=True)
+        exchange = self.conf.get('exchange')
+        routing_key = self.conf.get('routing_key')
 
-        if self.conf.get('bind_key'):
-            self.channel.queue_bind(self.conf['queue'], self.conf['exchange'], self.conf['bind_key'])
+        if exchange and routing_key:
+            self.channel.queue_bind(self.conf['queue_name'], exchange, routing_key)
 
     @handle_closed
     def basic_get(self, no_ack=False):
