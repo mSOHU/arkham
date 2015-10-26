@@ -158,7 +158,7 @@ class PublishService(ArkhamService):
     service_role = 'publish'
 
     @handle_closed
-    def publish(self, body, properties=None, mandatory=False, immediate=False, routing_key=None):
+    def publish(self, body, mandatory=False, immediate=False, routing_key=None, **kwargs):
         """Publish to the channel with the given exchange, routing key and body.
         For more information on basic_publish and what the parameters do, see:
 
@@ -168,13 +168,31 @@ class PublishService(ArkhamService):
         :type routing_key: str or unicode
         :param body: The message body
         :type body: str or unicode
-        :param pika.spec.BasicProperties properties: Basic.properties
         :param bool mandatory: The mandatory flag
         :param bool immediate: The immediate flag
+        :param properties:
+            content_type=None, content_encoding=None, delivery_mode=None,
+            priority=None, correlation_id=None, reply_to=None, expiration=None, message_id=None,
+            timestamp=None, type=None, user_id=None, app_id=None, cluster_id=None
+            extra kwargs will put into `headers`
         """
+        if kwargs:
+            properties = pika.BasicProperties(**{
+                key: kwargs.pop(key, None) for key in (
+                    'content_type', 'content_encoding', 'delivery_mode',
+                    'priority', 'correlation_id', 'reply_to', 'expiration', 'message_id',
+                    'timestamp', 'type', 'user_id', 'app_id', 'cluster_id'
+                )
+            })
+
+            if kwargs:
+                properties.headers = kwargs.copy()
+        else:
+            properties = None
+
         return self.channel.basic_publish(
             exchange=self.conf['exchange'],
-            routing_key=routing_key or self.conf['bind_key'],
+            routing_key=routing_key or self.conf['routing_key'],
             body=body, properties=properties,
             mandatory=mandatory, immediate=immediate,
         )
