@@ -1,0 +1,14 @@
+server:
+  host:
+  port:
+  vhost:
+  user:
+  passwd:
+
+consumer:
+  entry: arkham.consumer:Consumer
+  queue_name:
+  # optional if queue is bound to exchange already
+  exchange: exchange_name
+  routing_key: routing_key
+

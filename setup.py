@@ -10,7 +10,7 @@ Elizabeth Arkham Asylum for the Criminally Insane
 
 setup(
     name='arkham',
-    version='___version___',
+    version='0.0.1',
     description=long_description,
     long_description=long_description,
     author='the S.H.I.E.L.D TEAM',
@@ -21,4 +21,9 @@ setup(
         'pyyaml',
         'pika==0.10.0',
     ],
+    entry_points={
+        'console_scripts': [
+            'arc=arkham.consumer:consumer_entry',
+        ]
+    },
 )
