@@ -6,6 +6,7 @@
 @date: 10/27/2015 8:19 PM
 """
 
+import os
 import sys
 import inspect
 
@@ -37,6 +38,7 @@ consumer:
 
 def load_entry_point(ep):
     module_name, entry_point = ep.rsplit(':', 1)
+    sys.path.append(os.getcwd())
     module = __import__(module_name)
     return getattr(module, entry_point)
 
