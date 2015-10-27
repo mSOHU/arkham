@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__author__ = 'johnxu'
-__date__ = '10/21/2015 11:38 AM'
+"""
+@author: johnxu
+@date: 10/21/2015 11:38 AM
+"""
 
 
 import logging
