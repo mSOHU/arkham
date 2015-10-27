@@ -164,12 +164,12 @@ class PublishService(ArkhamService):
 
         http://www.rabbitmq.com/amqp-0-9-1-reference.html#basic.publish
 
-        :param routing_key: The routing key to bind on
-        :type routing_key: str or unicode
         :param body: The message body
         :type body: str or unicode
         :param bool mandatory: The mandatory flag
         :param bool immediate: The immediate flag
+        :param routing_key: defaults to config
+        :type routing_key: str | unicode
         :param properties:
             content_type=None, content_encoding=None, delivery_mode=None,
             priority=None, correlation_id=None, reply_to=None, expiration=None, message_id=None,
@@ -185,8 +185,9 @@ class PublishService(ArkhamService):
                 )
             })
 
+            properties.headers = kwargs.pop('headers', {})
             if kwargs:
-                properties.headers = kwargs.copy()
+                properties.headers.update(kwargs)
         else:
             properties = None
 
