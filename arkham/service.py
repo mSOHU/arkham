@@ -267,6 +267,27 @@ class SubscribeService(ArkhamService):
         return self.channel.basic_ack(delivery_tag=delivery_tag, multiple=multiple)
 
     @handle_closed
+    def reject(self, delivery_tag, multiple=False, requeue=True):
+        """This method allows a client to reject one or more incoming messages.
+        It can be used to interrupt and cancel large incoming messages, or
+        return untreatable messages to their original queue.
+
+        :param int delivery-tag: The server-assigned delivery tag
+        :param bool multiple: If set to True, the delivery tag is treated as
+                              "up to and including", so that multiple messages
+                              can be acknowledged with a single method. If set
+                              to False, the delivery tag refers to a single
+                              message. If the multiple field is 1, and the
+                              delivery tag is zero, this indicates
+                              acknowledgement of all outstanding messages.
+        :param bool requeue: If requeue is true, the server will attempt to
+                             requeue the message. If requeue is false or the
+                             requeue attempt fails the messages are discarded or
+                             dead-lettered.
+        """
+        return self.channel.basic_nack(delivery_tag=delivery_tag, multiple=multiple, requeue=requeue)
+
+    @handle_closed
     def consume(self, no_ack=False, exclusive=False,
                 arguments=None, inactivity_timeout=None):
         """Blocking consumption of a queue instead of via a callback. This
