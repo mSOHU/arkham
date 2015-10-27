@@ -12,3 +12,5 @@ consumer:
   exchange: exchange_name
   routing_key: routing_key
 
+service_name:
+  # other services

@@ -11,7 +11,7 @@ import inspect
 
 import yaml
 
-from . import SubscribeService
+from . import ArkhamService
 
 
 USAGE_STRING = """usage:
@@ -41,6 +41,27 @@ def load_entry_point(ep):
     return getattr(module, entry_point)
 
 
+def merge_configurations(config, consumer_name='__consumer'):
+    config = config.copy()
+
+    def _merge_dict(_d, _u):
+        for key, value in _u.items():
+            _d.setdefault(key, value)
+
+    services_conf = {
+        consumer_name: config.pop('consumer'),
+    }
+    server_conf = config.pop('server', {})
+    _merge_dict(services_conf[consumer_name], server_conf)
+    services_conf[consumer_name]['service_role'] = 'subscribe'
+
+    for name, service in config.items():
+        services_conf[name] = service
+        _merge_dict(services_conf[name], server_conf)
+
+    return services_conf
+
+
 def consumer_entry():
     if len(sys.argv) != 2:
         print USAGE_STRING
@@ -51,16 +72,9 @@ def consumer_entry():
         config = yaml.load(fp)
 
     entry_point = config['consumer'].pop('entry')
+    ArkhamService.init_config(merge_configurations(config))
 
-    service_config = {}
-    service_config.update(config['server'])
-    service_config.update(config['consumer'])
-
-    SubscribeService.init_config({
-        '__consumer': entry_point
-    })
-
-    subscriber = SubscribeService.get_instance('__consumer')
+    subscriber = ArkhamService.get_instance('__consumer')
     consumer = load_entry_point(entry_point)
 
     assert inspect.isclass(consumer), 'consumer must be a class'
@@ -82,6 +96,10 @@ class ArkhamConsumer(object):
     no_ack = False
     suppress_exceptions = ()
     reject_exceptions = ()
+
+    @classmethod
+    def get_service(cls, service_name):
+        return ArkhamService.get_instance(service_name)
 
     @classmethod
     def consume(cls, message, headers, properties):
