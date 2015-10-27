@@ -18,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ArkhamService(object):
-    VALID_ROLES = ('broadcast', 'subscribe', 'publish', )
+    VALID_ROLES = ('subscribe', 'publish', )
     CONNECTION_FACTORIES = {
         # 'tornado': pika.TornadoConnection,
         'blocking': pika.BlockingConnection,
@@ -47,6 +47,9 @@ class ArkhamService(object):
 
         assert service_name in base_cls.CONFIG, 'no proper config for instance: `%s`' % service_name
         conf = base_cls.CONFIG[service_name]
+
+        assert 'service_role' in conf, 'service `%s` not provide service_role field' % service_name
+        assert conf['service_role'] in cls.VALID_ROLES, 'role not valid: `%s`' % conf['service_role']
 
         if cls is not ArkhamService:
             assert conf['service_role'] == cls.service_role, \
