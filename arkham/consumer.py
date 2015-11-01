@@ -9,6 +9,7 @@
 import os
 import sys
 import inspect
+import logging
 
 import yaml
 
@@ -20,7 +21,7 @@ arc consumer.yaml
 
 example configuration:
 
-server:
+global:
   host:
   port:
   vhost:
@@ -53,13 +54,13 @@ def merge_configurations(config, consumer_name='__consumer'):
     services_conf = {
         consumer_name: config.pop('consumer'),
     }
-    server_conf = config.pop('server', {})
-    _merge_dict(services_conf[consumer_name], server_conf)
+    global_conf = config.pop('global', {})
+    _merge_dict(services_conf[consumer_name], global_conf)
     services_conf[consumer_name]['service_role'] = 'subscribe'
 
     for name, service in config.items():
         services_conf[name] = service
-        _merge_dict(services_conf[name], server_conf)
+        _merge_dict(services_conf[name], global_conf)
 
     return services_conf
 
@@ -82,22 +83,40 @@ def consumer_entry():
     assert inspect.isclass(consumer), 'consumer must be a class'
     assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamService'
 
-    for method, properties, body in subscriber.consume(no_ack=consumer.no_ack):
+    generator = subscriber.consume(
+        no_ack=consumer.no_ack,
+        inactivity_timeout=consumer.inactivate_timeout
+    )
+
+    logger = logging.getLogger('%s.%s' % (consumer.__module__, consumer.__name__))
+
+    for method, properties, body in generator:
+        if not method:
+            # inactivate notice
+            try:
+                consumer.inactivate()
+            except Exception as err:
+                logger.exception('Exception occurs in inactivate handler: %r' % err)
+
+            continue
+
         try:
             consumer.consume(body, headers=properties.headers, properties=properties)
-        except consumer.reject_exceptions:
+        except consumer.suppress_exceptions as err:
+            logger.exception('Message rejected due exception: %r' % err)
             if not consumer.no_ack:
                 subscriber.reject(method.delivery_tag)
-        except consumer.suppress_exceptions:
-            continue
         else:
-            subscriber.acknowledge(method.delivery_tag)
+            if not consumer.no_ack:
+                subscriber.acknowledge(method.delivery_tag)
 
 
 class ArkhamConsumer(object):
     no_ack = False
     suppress_exceptions = ()
-    reject_exceptions = ()
+
+    # int / float. if set, will call ArkhamConsumer.inactivate when timed-out
+    inactivate_timeout = None
 
     @classmethod
     def get_service(cls, service_name):
@@ -105,4 +124,8 @@ class ArkhamConsumer(object):
 
     @classmethod
     def consume(cls, message, headers, properties):
+        pass
+
+    @classmethod
+    def inactivate(cls):
         pass
