@@ -64,17 +64,25 @@ def consumer_entry():
     )
 
     logger = logging.getLogger('%s.%s' % (consumer.__module__, consumer.__name__))
+    inactivate_state = False
 
     for method, properties, body in generator:
         if not method:
+            if inactivate_state:
+                continue
+
             # inactivate notice
             try:
                 consumer.inactivate()
+                # make sure inactivate handler will be called successfully
+                inactivate_state = True
             except Exception as err:
                 logger.exception('Exception occurs in inactivate handler: %r' % err)
 
             continue
 
+        # if method is not None, reset inactivate_state flag
+        inactivate_state = False
         try:
             consumer.consume(body, headers=properties.headers, properties=properties)
         except consumer.suppress_exceptions as err:
