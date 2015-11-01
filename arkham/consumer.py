@@ -10,31 +10,11 @@ import os
 import sys
 import inspect
 import logging
+import argparse
 
 import yaml
 
-from . import ArkhamService
-
-
-USAGE_STRING = """usage:
-arc consumer.yaml
-
-example configuration:
-
-global:
-  host:
-  port:
-  vhost:
-  user:
-  passwd:
-
-consumer:
-  entry: arkham.consumer:Consumer
-  queue_name:
-  # optional if queue is bound to exchange already
-  exchange: exchange_name
-  routing_key: routing_key
-"""
+from arkham.service import ArkhamService
 
 
 def load_entry_point(ep):
@@ -44,20 +24,15 @@ def load_entry_point(ep):
     return getattr(module, entry_point)
 
 
-def merge_configurations(config, consumer_name='__consumer'):
+def merge_service_config(config):
     config = config.copy()
 
     def _merge_dict(_d, _u):
         for key, value in _u.items():
             _d.setdefault(key, value)
 
-    services_conf = {
-        consumer_name: config.pop('consumer'),
-    }
     global_conf = config.pop('global', {})
-    _merge_dict(services_conf[consumer_name], global_conf)
-    services_conf[consumer_name]['service_role'] = 'subscribe'
-
+    services_conf = {}
     for name, service in config.items():
         services_conf[name] = service
         _merge_dict(services_conf[name], global_conf)
@@ -66,19 +41,19 @@ def merge_configurations(config, consumer_name='__consumer'):
 
 
 def consumer_entry():
-    if len(sys.argv) != 2:
-        print USAGE_STRING
-        return
+    parser = argparse.ArgumentParser()
+    parser.add_argument(dest='consumer_name', help='name of consumer service')
+    parser.add_argument('-c', '--config', dest='config_path', required=True, help='full path of config.yaml')
+    parser.add_argument('-e', '--entry', dest='entry_point', required=True, help='full entry class path')
+    cmd_args = parser.parse_args()
 
-    config_path = sys.argv[1]
-    with open(config_path, 'rb') as fp:
+    with open(cmd_args.config_path, 'rb') as fp:
         config = yaml.load(fp)
 
-    entry_point = config['consumer'].pop('entry')
-    ArkhamService.init_config(merge_configurations(config))
+    ArkhamService.init_config(merge_service_config(config))
 
-    subscriber = ArkhamService.get_instance('__consumer')
-    consumer = load_entry_point(entry_point)
+    subscriber = ArkhamService.get_instance(cmd_args.consumer_name)
+    consumer = load_entry_point(cmd_args.entry_point)
 
     assert inspect.isclass(consumer), 'consumer must be a class'
     assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamService'
