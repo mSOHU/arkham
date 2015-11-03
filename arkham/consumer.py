@@ -6,52 +6,26 @@
 @date: 10/27/2015 8:19 PM
 """
 
-import os
-import sys
 import inspect
 import logging
 import argparse
 
-import yaml
-
 from arkham.service import ArkhamService
+from arkham.utils import load_entry_point
 
 
-def load_entry_point(ep):
-    module_name, entry_point = ep.rsplit(':', 1)
-    sys.path.append(os.getcwd())
-    module = __import__(module_name)
-    return getattr(module, entry_point)
-
-
-def merge_service_config(config):
-    config = config.copy()
-
-    def _merge_dict(_d, _u):
-        for key, value in _u.items():
-            _d.setdefault(key, value)
-
-    global_conf = config.pop('global', {})
-    services_conf = {}
-    for name, service in config.items():
-        services_conf[name] = service
-        _merge_dict(services_conf[name], global_conf)
-
-    return services_conf
-
-
-def consumer_entry():
+def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument(dest='consumer_name', help='name of consumer service')
     parser.add_argument('-c', '--config', dest='config_path', required=True, help='full path of config.yaml')
     parser.add_argument('-e', '--entry', dest='entry_point', required=True, help='full entry class path')
-    cmd_args = parser.parse_args()
+    return parser.parse_args()
 
-    with open(cmd_args.config_path, 'rb') as fp:
-        config = yaml.load(fp)
 
-    ArkhamService.init_config(merge_service_config(config))
+def consumer_entry():
+    cmd_args = parse_arguments()
 
+    ArkhamService.init_config(cmd_args.config_path)
     subscriber = ArkhamService.get_instance(cmd_args.consumer_name)
     consumer = load_entry_point(cmd_args.entry_point)
 

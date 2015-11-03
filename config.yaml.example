@@ -1,19 +1,16 @@
-publish_service:
+global:
   host:  # defaults to 127.0.0.1
   port:  # defaults to 5672
   vhost: /  # defaults to /
   user: guest
   passwd: guest
+
+publish_service:
   exchange: exchange_name
   routing_key: routing_key
   service_role: publish
 
 subscribe_service:
-  host:  # defaults to 127.0.0.1
-  port:  # defaults to 5672
-  vhost: /  # defaults to /
-  user: guest
-  passwd: guest
   service_role: subscribe
   queue_name:  # optional, defaults to random string
   exchange: exchange_name  # optional if queue is bound to exchange already

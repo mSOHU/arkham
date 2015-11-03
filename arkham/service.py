@@ -15,6 +15,8 @@ import pika
 import pika.exceptions
 from pika.adapters.blocking_connection import BlockingChannel
 
+from .utils import merge_service_config
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,7 +41,8 @@ class ArkhamService(object):
             with open(config, 'rb') as fp:
                 config = yaml.load(fp)
 
-        ArkhamService.CONFIG = config
+        assert isinstance(config, dict), 'wrong config format, plz check the example.'
+        ArkhamService.CONFIG = merge_service_config(config)
 
     @classmethod
     def get_instance(cls, service_name):
