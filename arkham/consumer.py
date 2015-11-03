@@ -34,18 +34,18 @@ def consumer_entry():
 
     generator = subscriber.consume(
         no_ack=consumer.no_ack,
-        inactivity_timeout=consumer.inactivate_timeout
+        inactivity_timeout=consumer.inactivity_timeout
     )
 
     logger = logging.getLogger('%s.%s' % (consumer.__module__, consumer.__name__))
     inactivate_state = False
 
-    for method, properties, body in generator:
-        if not method:
+    for yielded in generator:
+        # inactivate notice
+        if not yielded:
             if inactivate_state:
                 continue
 
-            # inactivate notice
             try:
                 consumer.inactivate()
                 # make sure inactivate handler will be called successfully
@@ -55,8 +55,9 @@ def consumer_entry():
 
             continue
 
-        # if method is not None, reset inactivate_state flag
+        # if yielded is not None, reset inactivate_state flag
         inactivate_state = False
+        method, properties, body = yielded
         try:
             consumer.consume(body, headers=properties.headers, properties=properties)
         except consumer.suppress_exceptions as err:
@@ -73,7 +74,7 @@ class ArkhamConsumer(object):
     suppress_exceptions = ()
 
     # int / float. if set, will call ArkhamConsumer.inactivate when timed-out
-    inactivate_timeout = None
+    inactivity_timeout = None
 
     @classmethod
     def get_service(cls, service_name):
