@@ -14,7 +14,7 @@ def load_entry_point(ep):
     module_name, entry_point = ep.rsplit(':', 1)
     sys.path.append(os.getcwd())
     module = __import__(module_name)
-    for name in module_name.split('.') + [entry_point]:
+    for name in module_name.split('.')[1:] + [entry_point]:
         module = getattr(module, name)
 
     return module
