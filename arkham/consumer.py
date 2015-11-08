@@ -75,10 +75,18 @@ class ArkhamConsumer(object):
 
     # int / float. if set, will call ArkhamConsumer.inactivate when timed-out
     inactivity_timeout = None
+    service_instances = {}
 
     @classmethod
-    def get_service(cls, service_name):
-        return ArkhamService.get_instance(service_name)
+    def get_service(cls, service_name, force=False):
+        if force:
+            return ArkhamService.get_instance(service_name)
+
+        instance = cls.service_instances.get(service_name)
+        if not instance:
+            instance = cls.service_instances[service_name] = ArkhamService.get_instance(service_name)
+
+        return instance
 
     @classmethod
     def consume(cls, message, headers, properties):
