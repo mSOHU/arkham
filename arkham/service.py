@@ -104,6 +104,7 @@ class ArkhamService(object):
         self.conf = conf
         self.connection = self.get_connection(name, conf)
         self.channel = self.connection.channel()
+        self.handle_declarations()
 
     def make_channel(self):
         """
