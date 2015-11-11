@@ -6,6 +6,7 @@
 @date: 10/27/2015 8:19 PM
 """
 
+import json
 import inspect
 import logging
 import argparse
@@ -58,6 +59,10 @@ def consumer_entry():
         # if yielded is not None, reset inactivate_state flag
         inactivate_state = False
         method, properties, body = yielded
+
+        if properties.headers.get('content_type') == 'application/json' and isinstance(body, str):
+            body = json.loads(body, ensure_ascii=False)
+
         try:
             consumer.consume(body, headers=properties.headers, properties=properties)
         except consumer.suppress_exceptions as err:
