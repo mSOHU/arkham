@@ -7,6 +7,7 @@
 """
 
 
+import json
 import logging
 import functools
 
@@ -185,6 +186,10 @@ class PublishService(ArkhamService):
             timestamp=None, type=None, user_id=None, app_id=None, cluster_id=None
             extra kwargs will put into `headers`
         """
+        if isinstance(body, dict):
+            body = json.dumps(body, ensure_ascii=False)
+            kwargs['content_type'] = 'application/json'
+
         if kwargs:
             properties = pika.BasicProperties(**{
                 key: kwargs.pop(key, None) for key in (
@@ -218,6 +223,12 @@ class SubscribeService(ArkhamService):
         routing_key = self.conf.get('routing_key')
 
         if exchange and routing_key:
+            queue_name = self.conf.get('queue_name')
+            if queue_name is None:
+                method = self.channel.queue_declare(queue_name, exclusive=True, auto_delete=True)
+                self.conf['queue_name'] = method.method.queue
+            else:
+                self.channel.queue_declare(queue_name)
             self.channel.queue_bind(self.conf['queue_name'], exchange, routing_key)
 
     @handle_closed
