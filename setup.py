@@ -24,6 +24,8 @@ setup(
     entry_points={
         'console_scripts': [
             'arc=arkham.consumer:consumer_entry',
+            'ark-consumer=arkham.consumer:consumer_entry',
+            'ark-rpc=arkham.consumer:consumer_entry',
         ]
     },
 )
