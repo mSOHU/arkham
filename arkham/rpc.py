@@ -42,7 +42,14 @@ class RPCException(Exception):
 
 
 class RPCService(ArkhamService):
+    RPC_CONTENT_TYPE = 'application/arkham-rpc'
+    RPC_CONTENT_ENCODING = 'json.UTF-8'
     DIRECT_QUEUE = 'amq.rabbitmq.reply-to'
+    DIRECT_PROPS = pika.BasicProperties(
+        reply_to=DIRECT_QUEUE,
+        content_type=RPC_CONTENT_TYPE,
+        content_encoding=RPC_CONTENT_ENCODING,
+    )
 
     def call(self, service_name, *args, **kwargs):
         full_result = kwargs.pop('full_result', False)
@@ -73,7 +80,7 @@ class RPCService(ArkhamService):
             exchange=self.conf['exchange'],
             routing_key=routing_key or self.conf['routing_key'],
             body=json.dumps(package, ensure_ascii=False),
-            properties=pika.BasicProperties(reply_to=self.DIRECT_QUEUE),
+            properties=self.DIRECT_PROPS,
         )
 
         start_time = time.time()
@@ -94,8 +101,6 @@ class RPCService(ArkhamService):
 
 
 class ArkhamRPCServer(object):
-    no_ack = False
-
     def __init__(self):
         self.registry = {}
 
@@ -105,20 +110,30 @@ class ArkhamRPCServer(object):
             return fn
         return _decorator
 
-    def handle_message(self, method, message, properties):
-        spec = json.loads(message)
-
-        service_fn = self.registry.get(spec['service_name'])
+    def handle_message(self, message):
+        service_fn = self.registry.get(message['service_name'])
         if service_fn is None:
-            raise ServiceNotRegistered(spec['service_name'])
+            raise ServiceNotRegistered(message['service_name'])
 
-        return service_fn(*spec['args'], **spec['kwargs'])
+        return service_fn(*message['args'], **message['kwargs'])
+
+    def parse_message(self, method, message, properties):
+        assert properties.content_type == RPCService.RPC_CONTENT_TYPE, 'invalid content-type'
+        assert properties.content_encoding == RPCService.RPC_CONTENT_ENCODING, 'unsupported content-encoding'
+        return json.loads(message)
 
     def start(self, consumer_name):
         subscriber = ArkhamService.get_instance(consumer_name)
-        for method, message, properties in subscriber.consume(no_ack=self.no_ack):
+        for method, message, properties in subscriber.consume():
             try:
-                result = self.handle_message(method, message, properties)
+                message = self.parse_message(method, message, properties)
+            except (ValueError, TypeError, AssertionError) as err:
+                LOGGER.error('Invalid request in RPC queue. [%s], %r', err.message, properties)
+                subscriber.reject(method.delivery_tag, requeue=False)
+                continue
+
+            try:
+                result = self.handle_message(message)
                 reply = {
                     'status': 'ok',
                     'message': 'success',
@@ -133,7 +148,9 @@ class ArkhamRPCServer(object):
 
             try:
                 subscriber.channel.basic_publish('', properties.reply_to, json.dumps(reply))
+                subscriber.acknowledge(method.delivery_tag)
             except Exception as err:
+                subscriber.reject(method.delivery_tag)
                 LOGGER.exception('Exception occurs when trying to reply RPC. %r, %r', err, reply)
 
 
