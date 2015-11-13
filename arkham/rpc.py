@@ -71,6 +71,7 @@ class RPCService(ArkhamService):
                 result[0] = body
 
             channel.basic_cancel(consumer_tag)
+            channel.close()
 
         consumer_tag = channel.basic_consume(_callback, self.DIRECT_QUEUE, no_ack=True)
         package = {
