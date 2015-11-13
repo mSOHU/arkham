@@ -119,7 +119,8 @@ class ArkhamRPCServer(object):
 
         return service_fn(*message['args'], **message['kwargs'])
 
-    def parse_message(self, method, message, properties):
+    @classmethod
+    def parse_message(cls, method, message, properties):
         assert properties.content_type == RPCService.RPC_CONTENT_TYPE, 'invalid content-type'
         assert properties.content_encoding == RPCService.RPC_CONTENT_ENCODING, 'unsupported content-encoding'
         return json.loads(message)
