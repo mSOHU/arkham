@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ArkhamService(object):
-    VALID_ROLES = ('subscribe', 'publish', )
+    VALID_ROLES = ('subscribe', 'publish', 'rpc', )
     CONNECTION_FACTORIES = {
         # 'tornado': pika.TornadoConnection,
         'blocking': pika.BlockingConnection,

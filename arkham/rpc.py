@@ -36,12 +36,14 @@ class RPCException(Exception):
         self.traceback_text = traceback_text
 
     def __repr__(self):
-        return 'Service %s fails: \n%s' % (self.service_name, self.traceback_text)
+        return 'Service `%s` fails: \n%s' % (self.service_name, self.traceback_text)
 
     __str__ = __repr__
 
 
 class RPCService(ArkhamService):
+    service_role = 'rpc'
+
     RPC_CONTENT_TYPE = 'application/arkham-rpc'
     RPC_CONTENT_ENCODING = 'json.UTF-8'
     DIRECT_QUEUE = 'amq.rabbitmq.reply-to'
@@ -95,7 +97,7 @@ class RPCService(ArkhamService):
 
         reply = json.loads(result[0])
         if reply['status'] == 'fail':
-            raise RPCException(service_name, reply['messsage'])
+            raise RPCException(service_name, reply['message'])
         else:
             return reply['data']
 
@@ -124,11 +126,11 @@ class ArkhamRPCServer(object):
 
     def start(self, consumer_name):
         subscriber = ArkhamService.get_instance(consumer_name)
-        for method, message, properties in subscriber.consume():
+        for method, properties, body in subscriber.consume():
             try:
-                message = self.parse_message(method, message, properties)
+                message = self.parse_message(method, body, properties)
             except (ValueError, TypeError, AssertionError) as err:
-                LOGGER.error('Invalid request in RPC queue. [%s], %r', err.message, properties)
+                LOGGER.error('Invalid request in RPC queue. [%s], %r', err.message, properties.__dict__)
                 subscriber.reject(method.delivery_tag, requeue=False)
                 continue
 
