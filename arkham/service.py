@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ArkhamService(object):
-    VALID_ROLES = ('subscribe', 'publish', )
+    VALID_ROLES = ('subscribe', 'publish', 'rpc', )
     CONNECTION_FACTORIES = {
         # 'tornado': pika.TornadoConnection,
         'blocking': pika.BlockingConnection,
@@ -180,7 +180,7 @@ class PublishService(ArkhamService):
         :param bool immediate: The immediate flag
         :param routing_key: defaults to config
         :type routing_key: str | unicode
-        :param properties:
+        :param kwargs: properties
             content_type=None, content_encoding=None, delivery_mode=None,
             priority=None, correlation_id=None, reply_to=None, expiration=None, message_id=None,
             timestamp=None, type=None, user_id=None, app_id=None, cluster_id=None
@@ -270,7 +270,7 @@ class SubscribeService(ArkhamService):
         confirm mode. The acknowledgement can be for a single message or a
         set of messages up to and including a specific message.
 
-        :param int delivery-tag: The server-assigned delivery tag
+        :param int delivery_tag: The server-assigned delivery tag
         :param bool multiple: If set to True, the delivery tag is treated as
                               "up to and including", so that multiple messages
                               can be acknowledged with a single method. If set
@@ -287,7 +287,7 @@ class SubscribeService(ArkhamService):
         It can be used to interrupt and cancel large incoming messages, or
         return untreatable messages to their original queue.
 
-        :param int delivery-tag: The server-assigned delivery tag
+        :param int delivery_tag: The server-assigned delivery tag
         :param bool multiple: If set to True, the delivery tag is treated as
                               "up to and including", so that multiple messages
                               can be acknowledged with a single method. If set
