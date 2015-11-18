@@ -8,6 +8,7 @@
 
 import os
 import sys
+import random
 
 
 def load_entry_point(ep):
@@ -34,3 +35,10 @@ def merge_service_config(config):
         _merge_dict(services_conf[name], global_conf)
 
     return services_conf
+
+
+RAND_STRING = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+
+
+def gen_rand_string(length=8):
+    return ''.join(random.sample(RAND_STRING * length, length))
