@@ -16,7 +16,7 @@ import pika
 import pika.exceptions
 from pika.adapters.blocking_connection import BlockingChannel
 
-from .utils import merge_service_config
+from .utils import merge_service_config, gen_rand_string
 
 
 LOGGER = logging.getLogger(__name__)
@@ -225,8 +225,8 @@ class SubscribeService(ArkhamService):
         if exchange and routing_key:
             queue_name = self.conf.get('queue_name')
             if queue_name is None:
-                method = self.channel.queue_declare(queue_name, exclusive=True, auto_delete=True)
-                self.conf['queue_name'] = method.method.queue
+                self.conf['queue_name'] = queue_name = 'queue.gen-%s' % gen_rand_string(22)
+                self.channel.queue_declare(queue_name, exclusive=True, auto_delete=True)
             else:
                 self.channel.queue_declare(queue_name)
             self.channel.queue_bind(self.conf['queue_name'], exchange, routing_key)
