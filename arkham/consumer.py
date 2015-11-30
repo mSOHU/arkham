@@ -60,7 +60,9 @@ def consumer_entry():
         inactivate_state = False
         method, properties, body = yielded
 
-        if properties.headers.get('content_type') == 'application/json' and isinstance(body, str):
+        if properties.headers \
+                and properties.headers.get('content_type') == 'application/json' \
+                and isinstance(body, str):
             body = json.loads(body, ensure_ascii=False)
 
         try:
