@@ -10,6 +10,7 @@ import json
 import time
 import logging
 import argparse
+import functools
 import traceback
 
 import pika
@@ -58,33 +59,17 @@ class RPCService(ArkhamService):
         routing_key = kwargs.pop('routing_key', None)
         timeout = kwargs.pop('timeout', None)
 
-        channel = self.make_channel()
         result = [None]
 
-        def _callback(ch, method, properties, body):
-            if result[0] is not None:
-                LOGGER.error('Duplicate result received!')
+        def _callback(key, ch, method, properties, body):
+            result[0] = (method, properties, body)
 
-            if full_result:
-                result[0] = (method, properties, body)
-            else:
-                result[0] = body
-
-            channel.basic_cancel(consumer_tag)
-            channel.close()
-
-        consumer_tag = channel.basic_consume(_callback, self.DIRECT_QUEUE, no_ack=True)
-        package = {
-            'service_name': service_name,
-            'args': args,
-            'kwargs': kwargs,
-        }
-        channel.basic_publish(
-            exchange=self.conf['exchange'],
-            routing_key=routing_key or self.conf['routing_key'],
-            body=json.dumps(package, ensure_ascii=False),
-            properties=self.DIRECT_PROPS,
-        )
+        self.make_rpc_call(
+            routing_key, json.dumps({
+                'service_name': service_name,
+                'args': args,
+                'kwargs': kwargs,
+        }, ensure_ascii=False), _callback)
 
         start_time = time.time()
         while result[0] is None:
@@ -96,11 +81,73 @@ class RPCService(ArkhamService):
         if full_result:
             return result[0]
 
-        reply = json.loads(result[0])
+        reply = json.loads(result[0][2])
         if reply['status'] == 'fail':
             raise RPCException(service_name, reply['message'])
         else:
             return reply['data']
+
+    def make_rpc_call(self, routing_key, payload, callback):
+        channel = self.make_channel()
+        done = [False]
+
+        def _callback(ch, method, properties, body):
+            if done[0]:
+                LOGGER.error('Duplicate result received!')
+                raise ValueError('Duplicate result received!')
+
+            done[0] = True
+
+            channel.basic_cancel(consumer_tag)
+            channel.close()
+
+            callback(routing_key, ch, method, properties, body)
+
+        consumer_tag = channel.basic_consume(_callback, self.DIRECT_QUEUE, no_ack=True)
+        channel.basic_publish(
+            exchange=self.conf['exchange'],
+            routing_key=routing_key or self.conf['routing_key'],
+            body=payload,
+            properties=self.DIRECT_PROPS,
+        )
+        return channel
+
+    def call_multi(self, service_name, routing_keys, *args, **kwargs):
+        full_result = kwargs.pop('full_result', False)
+        timeout = kwargs.pop('timeout', None)
+
+        results = {}
+
+        def _callback(key, ch, _method, _properties, _body):
+            results[key] = _method, _properties, _body
+
+        payload = json.dumps({
+            'service_name': service_name,
+            'args': args,
+            'kwargs': kwargs,
+        }, ensure_ascii=False)
+
+        for routing_key in routing_keys:
+            self.make_rpc_call(routing_key, payload, _callback)
+
+        start_time = time.time()
+        while len(results) < len(routing_keys):
+            if timeout and (time.time() - start_time) > timeout:
+                raise TimeoutError()
+
+            self.connection.process_data_events(0.01)
+
+        if full_result:
+            return results
+
+        for routing_key, (method, properties, body) in results.items():
+            reply = json.loads(body)
+            if reply['status'] == 'fail':
+                results[routing_key] = RPCException(service_name, reply['message'])
+            else:
+                results[routing_key] = reply['data']
+
+        return results
 
 
 class ArkhamRPCServer(object):
