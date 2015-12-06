@@ -73,7 +73,7 @@ def consumer_entry():
     assert inspect.isclass(consumer), 'consumer must be a class'
     assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamService'
 
-    logger = consumer.logger or logging
+    logger = consumer.logger = consumer.logger or logging
 
     callbacks = collect_period_callbacks(consumer)
     for callback, args in callbacks.values():
