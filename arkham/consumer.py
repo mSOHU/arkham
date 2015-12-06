@@ -14,6 +14,7 @@ import argparse
 
 from arkham.service import ArkhamService
 from arkham.utils import load_entry_point
+from arkham.healthy import HealthyCheckerMixin
 
 
 def parse_arguments():
@@ -79,6 +80,11 @@ def consumer_entry():
     for callback, args in callbacks.values():
         apply_period_callback(subscriber.connection._impl, callback, args, logger)
 
+    try:
+        consumer.prepare_healthy_check(subscriber)
+    except AssertionError as err:
+        logger.warning('Error preparing healthy checker: %s', err.message)
+
     generator = subscriber.consume(
         no_ack=consumer.no_ack,
         inactivity_timeout=consumer.inactivity_timeout
@@ -138,7 +144,7 @@ def period_callback(interval, startup_call=False, ignore_tick=False):
     return _decorator
 
 
-class ArkhamConsumer(object):
+class ArkhamConsumer(HealthyCheckerMixin):
     no_ack = False
     suppress_exceptions = ()
 
