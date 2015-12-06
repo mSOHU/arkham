@@ -38,16 +38,25 @@ def collect_period_callbacks(consumer):
 
 def apply_period_callback(ioloop, callback, args, logger):
     def _wrapper():
-        start_time = time.time()
         try:
             callback()
         except Exception as err:
             logger.exception('Exception occurs in callback %s: %r' % (callback.__name__, err))
 
-        timeout = args['interval'] - ((time.time() - start_time) % args['interval'])
+        now_time = time.time()
+        next_schedule = args['interval'] - (now_time - last_schedule[0])
+        if args['ignore_tick']:
+            # if misses, schedule at next tick
+            timeout = next_schedule % args['interval']
+        else:
+            # if misses, schedule now
+            timeout = max(next_schedule, 0)
+
+        last_schedule[0] = now_time + timeout
         ioloop.add_timeout(timeout, _wrapper)
 
     _start_timeout = 0 if args['startup_call'] else args['interval']
+    last_schedule = [time.time() + _start_timeout]
     ioloop.add_timeout(_start_timeout, _wrapper)
 
 
@@ -109,13 +118,18 @@ def consumer_entry():
                 subscriber.acknowledge(method.delivery_tag)
 
 
-def period_callback(interval, startup_call=False):
+def period_callback(interval, startup_call=False, ignore_tick=False):
+    """
+    :param ignore_tick:
+        bool, if True, ignore missed ticks, otherwise, when miss occurs, re-schedule callbacks ASAP
+    """
     def _decorator(fn):
         _interval = int(interval)
         assert _interval > 0, 'invalid interval value: %r' % interval
         fn.periodically_args = {
             'interval': _interval,
             'startup_call': startup_call,
+            'ignore_tick': ignore_tick,
         }
         return fn
     return _decorator
