@@ -7,6 +7,7 @@
 """
 
 import json
+import time
 import inspect
 import logging
 import argparse
@@ -23,6 +24,33 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def collect_period_callbacks(consumer):
+    callbacks = {}
+    for attr_name in dir(consumer):
+        attr = getattr(consumer, attr_name)
+        if not inspect.ismethod(attr) or not hasattr(attr.im_func, 'periodically_args'):
+            continue
+
+        callbacks[attr_name] = attr, attr.im_func.periodically_args
+
+    return callbacks
+
+
+def apply_period_callback(ioloop, callback, args, logger):
+    def _wrapper():
+        start_time = time.time()
+        try:
+            callback()
+        except Exception as err:
+            logger.exception('Exception occurs in callback %s: %r' % (callback.__name__, err))
+
+        timeout = args['interval'] - ((time.time() - start_time) % args['interval'])
+        ioloop.add_timeout(timeout, _wrapper)
+
+    _start_timeout = 0 if args['startup_call'] else args['interval']
+    ioloop.add_timeout(_start_timeout, _wrapper)
+
+
 def consumer_entry():
     cmd_args = parse_arguments()
 
@@ -33,12 +61,16 @@ def consumer_entry():
     assert inspect.isclass(consumer), 'consumer must be a class'
     assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamService'
 
+    logger = consumer.logger or logging
+
+    callbacks = collect_period_callbacks(consumer)
+    for callback, args in callbacks.values():
+        apply_period_callback(subscriber.connection._impl, callback, args, logger)
+
     generator = subscriber.consume(
         no_ack=consumer.no_ack,
         inactivity_timeout=consumer.inactivity_timeout
     )
-
-    logger = consumer.logger or logging
 
     inactivate_state = False
 
@@ -75,6 +107,18 @@ def consumer_entry():
         else:
             if not consumer.no_ack:
                 subscriber.acknowledge(method.delivery_tag)
+
+
+def period_callback(interval, startup_call=False):
+    def _decorator(fn):
+        _interval = int(interval)
+        assert _interval > 0, 'invalid interval value: %r' % interval
+        fn.periodically_args = {
+            'interval': _interval,
+            'startup_call': startup_call,
+        }
+        return fn
+    return _decorator
 
 
 class ArkhamConsumer(object):
