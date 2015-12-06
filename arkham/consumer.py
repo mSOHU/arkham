@@ -38,7 +38,8 @@ def consumer_entry():
         inactivity_timeout=consumer.inactivity_timeout
     )
 
-    logger = logging.getLogger('%s.%s' % (consumer.__module__, consumer.__name__))
+    logger = consumer.logger or logging
+
     inactivate_state = False
 
     for yielded in generator:
@@ -83,6 +84,7 @@ class ArkhamConsumer(object):
     # int / float. if set, will call ArkhamConsumer.inactivate when timed-out
     inactivity_timeout = None
     service_instances = {}
+    logger = None
 
     @classmethod
     def get_service(cls, service_name, force=False):
