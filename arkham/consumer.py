@@ -25,6 +25,9 @@ def parse_arguments():
 
 
 def collect_period_callbacks(consumer):
+    if consumer.heartbeat_interval:
+        period_callback(consumer.heartbeat_interval)(consumer.heartbeat.im_func)
+
     callbacks = {}
     for attr_name in dir(consumer):
         attr = getattr(consumer, attr_name)
@@ -143,6 +146,7 @@ class ArkhamConsumer(object):
     inactivity_timeout = None
     service_instances = {}
     logger = None
+    heartbeat_interval = None
 
     @classmethod
     def get_service(cls, service_name, force=False):
@@ -157,6 +161,10 @@ class ArkhamConsumer(object):
 
     @classmethod
     def consume(cls, message, headers, properties):
+        pass
+
+    @classmethod
+    def heartbeat(cls):
         pass
 
     @classmethod
