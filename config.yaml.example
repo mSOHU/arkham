@@ -26,7 +26,6 @@ service_full:
   routing_key: routing_key
   service_role: subscribe | publish
   queue_name:  # if role is subscribe, queue_name is optional, defaults to random string
-  type: blocking
   strategy: channel | connection  # defaults to one channel pre instance
   extra_params:  # applies in ConnectionParameters
   connection_params:  # applies while build Connection object

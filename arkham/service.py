@@ -24,10 +24,6 @@ LOGGER = logging.getLogger(__name__)
 
 class ArkhamService(object):
     VALID_ROLES = ('subscribe', 'publish', 'rpc', )
-    CONNECTION_FACTORIES = {
-        # 'tornado': pika.TornadoConnection,
-        'blocking': pika.BlockingConnection,
-    }
     REGISTRY = None
     CONFIG = {}
     CONNECTIONS = {}
@@ -84,8 +80,7 @@ class ArkhamService(object):
             )
 
         parameters = pika.ConnectionParameters(**params)
-        conn_factory = cls.CONNECTION_FACTORIES[conf.get('type', 'blocking')]
-        return conn_factory(parameters, **conf.get('connection_params', {}))
+        return pika.BlockingConnection(parameters, **conf.get('connection_params', {}))
 
     @classmethod
     def get_connection(cls, name, conf, force_instance=False):
