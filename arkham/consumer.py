@@ -6,6 +6,7 @@
 @date: 10/27/2015 8:19 PM
 """
 
+import os
 import json
 import time
 import inspect
@@ -13,8 +14,8 @@ import logging
 import argparse
 
 from arkham.service import ArkhamService
-from arkham.utils import load_entry_point
 from arkham.healthy import HealthyCheckerMixin
+from arkham.utils import load_entry_point, ArkhamWarning
 
 
 def parse_arguments():
@@ -64,15 +65,40 @@ def apply_period_callback(ioloop, callback, args, logger):
     ioloop.add_timeout(_start_timeout, _wrapper)
 
 
+def find_config(args):
+    """find config file when running in virtualenv"""
+    config_path = args.config_path
+    if config_path.startswith('/'):
+        return config_path
+
+    _path = config_path
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    _path = os.path.join('etc', config_path)
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    module = __import__(args.entry_point.split('.', 1)[0])
+    _path = os.path.join(os.path.dirname(module.__file__), config_path)
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    return _path
+
+
 def consumer_entry():
     cmd_args = parse_arguments()
 
-    ArkhamService.init_config(cmd_args.config_path)
+    ArkhamService.init_config(find_config(cmd_args))
     subscriber = ArkhamService.get_instance(cmd_args.consumer_name)
     consumer = load_entry_point(cmd_args.entry_point)
 
     assert inspect.isclass(consumer), 'consumer must be a class'
     assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamService'
+    has_kwargs = bool(inspect.getargspec(consumer.consume.im_func).keywords)
+    if not has_kwargs:
+        ArkhamWarning.warn('consume function should have **kwargs.')
 
     logger = consumer.logger = consumer.logger or logging
 
@@ -117,7 +143,10 @@ def consumer_entry():
             body = json.loads(body, ensure_ascii=False)
 
         try:
-            consumer.consume(body, headers=properties.headers, properties=properties)
+            if has_kwargs:
+                consumer.consume(body, headers=properties.headers, properties=properties, method=method)
+            else:
+                consumer.consume(body, headers=properties.headers, properties=properties)
         except consumer.suppress_exceptions as err:
             logger.exception('Message rejected due exception: %r' % err)
             if not consumer.no_ack:
@@ -166,7 +195,13 @@ class ArkhamConsumer(HealthyCheckerMixin):
         return instance
 
     @classmethod
-    def consume(cls, message, headers, properties):
+    def consume(cls, message, **kwargs):
+        """
+        :param kwargs: includes
+            - properties
+            - headers
+            - method
+        """
         pass
 
     @classmethod

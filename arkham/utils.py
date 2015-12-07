@@ -9,6 +9,8 @@
 import os
 import sys
 import random
+import warnings
+from exceptions import Warning, StandardError
 
 
 def load_entry_point(ep):
@@ -42,3 +44,9 @@ RAND_STRING = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 def gen_rand_string(length=8):
     return ''.join(random.sample(RAND_STRING * length, length))
+
+
+class ArkhamWarning(Warning, StandardError):
+    @classmethod
+    def warn(cls, message):
+        warnings.warn(message, cls)
