@@ -10,7 +10,7 @@ Elizabeth Arkham Asylum for the Criminally Insane
 
 setup(
     name='arkham',
-    version='0.0.1',
+    version='___version___',
     description=long_description,
     long_description=long_description,
     author='the S.H.I.E.L.D TEAM',
