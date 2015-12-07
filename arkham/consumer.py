@@ -13,7 +13,7 @@ import logging
 import argparse
 
 from arkham.service import ArkhamService
-from arkham.utils import load_entry_point
+from arkham.utils import load_entry_point, ArkhamWarning
 
 
 def parse_arguments():
@@ -72,6 +72,9 @@ def consumer_entry():
 
     assert inspect.isclass(consumer), 'consumer must be a class'
     assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamService'
+    has_kwargs = bool(inspect.getargspec(consumer.consume.im_func).keywords)
+    if not has_kwargs:
+        ArkhamWarning.warn('consume function should have **kwargs.')
 
     logger = consumer.logger = consumer.logger or logging
 
@@ -111,7 +114,10 @@ def consumer_entry():
             body = json.loads(body, ensure_ascii=False)
 
         try:
-            consumer.consume(body, headers=properties.headers, properties=properties)
+            if has_kwargs:
+                consumer.consume(body, headers=properties.headers, properties=properties, method=method)
+            else:
+                consumer.consume(body, headers=properties.headers, properties=properties)
         except consumer.suppress_exceptions as err:
             logger.exception('Message rejected due exception: %r' % err)
             if not consumer.no_ack:
@@ -160,7 +166,13 @@ class ArkhamConsumer(object):
         return instance
 
     @classmethod
-    def consume(cls, message, headers, properties):
+    def consume(cls, message, **kwargs):
+        """
+        :param kwargs: includes
+            - properties
+            - headers
+            - method
+        """
         pass
 
     @classmethod
