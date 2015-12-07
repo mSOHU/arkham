@@ -6,6 +6,7 @@
 @date: 10/27/2015 8:19 PM
 """
 
+import os
 import json
 import time
 import inspect
@@ -63,10 +64,32 @@ def apply_period_callback(ioloop, callback, args, logger):
     ioloop.add_timeout(_start_timeout, _wrapper)
 
 
+def find_config(args):
+    """find config file when running in virtualenv"""
+    config_path = args.config_path
+    if config_path.startswith('/'):
+        return config_path
+
+    _path = config_path
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    _path = os.path.join('etc', config_path)
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    module = __import__(args.entry_point.split('.', 1)[0])
+    _path = os.path.join(os.path.dirname(module.__file__), config_path)
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    return _path
+
+
 def consumer_entry():
     cmd_args = parse_arguments()
 
-    ArkhamService.init_config(cmd_args.config_path)
+    ArkhamService.init_config(find_config(cmd_args))
     subscriber = ArkhamService.get_instance(cmd_args.consumer_name)
     consumer = load_entry_point(cmd_args.entry_point)
 
