@@ -39,8 +39,8 @@ class HealthyCheckerMixin(object):
             healthy_context = {}
 
         healthy_context.update({
-            key[len('HEALTHY_'):].lower: value
-            for key, value in os.environ.keys()
+            key[len('HEALTHY_'):].lower(): value
+            for key, value in os.environ.items()
             if key.startswith('HEALTHY_')
         })
 
