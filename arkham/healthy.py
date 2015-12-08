@@ -12,29 +12,25 @@ import time
 import traceback
 
 from .utils import gen_rand_string
+from .rpc import RPCService
+from .service import ArkhamService
 
 
 class HealthyCheckerMixin(object):
-    healthy_check_exchange = 'exchange.healthy'
-
     @classmethod
     def health_check(cls):
-        return {
-            'message': 'success',
-            'status': 'ok',
-            'timestamp': time.time(),
-            'data': {},
-        }
+        return {}
 
 
 class HealthyChecker(object):
+    healthy_check_exchange = 'exchange.healthy'
+
     def __init__(self, subscriber, consumer_cls):
         assert issubclass(consumer_cls, HealthyCheckerMixin)
         self.consumer_cls = consumer_cls
         self.subscriber = subscriber
         self.healthy_context = self.build_healthy_context()
         self.routing_key = '%s.%s' % (self.healthy_context['instance_id'], self.healthy_context['process_num'])
-        self.healthy_check_exchange = consumer_cls.healthy_check_exchange
 
     @classmethod
     def build_healthy_context(cls):
@@ -45,9 +41,9 @@ class HealthyChecker(object):
             healthy_context = {}
 
         healthy_context.update({
-            key[len('HEALTHY_'):].lower(): value
+            key[len('SUPER_'):].lower(): value
             for key, value in os.environ.items()
-            if key.startswith('HEALTHY_')
+            if key.startswith('SUPER_')
         })
 
         assert 'instance_id' in healthy_context and 'process_num' in healthy_context, \
@@ -56,14 +52,25 @@ class HealthyChecker(object):
 
     def healthy_consumer(self, channel, method, properties, body):
         try:
-            result = self.consumer_cls.health_check()
-            result['context'] = self.healthy_context
+            payload = self.consumer_cls.health_check()
+            result = {
+                'status': 'ok',
+                'message': 'success',
+                'data': {
+                    'payload': payload,
+                    'timestamp': time.time(),
+                    'context': self.healthy_context,
+                }
+            }
         except Exception:
             result = {
-                'status': 'error',
-                'timestamp': time.time(),
-                'context': self.healthy_context,
+                'status': 'fail',
                 'message': traceback.format_exc(),
+                'data': {
+                    'payload': None,
+                    'timestamp': time.time(),
+                    'context': self.healthy_context,
+                },
             }
 
         try:
@@ -80,3 +87,19 @@ class HealthyChecker(object):
         channel.queue_declare(queue_name, exclusive=True, auto_delete=True)
         channel.queue_bind(queue_name, self.healthy_check_exchange, self.routing_key)
         channel.basic_consume(self.healthy_consumer, queue_name)
+
+
+class HealthyService(RPCService):
+    service_role = 'healthy'
+    healthy_config = {
+        'exchange': HealthyChecker.healthy_check_exchange,
+        'service_role': service_role,
+    }
+
+    @classmethod
+    def get_instance(cls, service_name):
+        ArkhamService.CONFIG['__healthy__'] = cls.healthy_config
+        return ArkhamService.get_instance(service_name)
+
+    def check(self, routing_key):
+        return self.call('', routing_key=routing_key)
