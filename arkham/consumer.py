@@ -14,7 +14,7 @@ import logging
 import argparse
 
 from arkham.service import ArkhamService
-from arkham.healthy import HealthyCheckerMixin
+from arkham.healthy import HealthyCheckerMixin, HealthyChecker
 from arkham.utils import load_entry_point, ArkhamWarning
 
 
@@ -107,7 +107,7 @@ def consumer_entry():
         apply_period_callback(subscriber.connection._impl, callback, args, logger)
 
     try:
-        consumer.prepare_healthy_check(subscriber)
+        HealthyChecker(subscriber, consumer).prepare_healthy_check()
     except AssertionError as err:
         logger.warning('Error preparing healthy checker: %s', err.message)
 
