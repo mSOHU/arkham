@@ -10,17 +10,15 @@ import os
 import sys
 import random
 import warnings
+import importlib
 from exceptions import Warning, StandardError
 
 
 def load_entry_point(ep):
     module_name, entry_point = ep.rsplit(':', 1)
     sys.path.append(os.getcwd())
-    module = __import__(module_name)
-    for name in module_name.split('.')[1:] + [entry_point]:
-        module = getattr(module, name)
-
-    return module
+    module = importlib.import_module(module_name)
+    return getattr(module, entry_point)
 
 
 def merge_service_config(config):
@@ -49,4 +47,4 @@ def gen_rand_string(length=8):
 class ArkhamWarning(Warning, StandardError):
     @classmethod
     def warn(cls, message):
-        warnings.warn(message, cls)
+        warnings.warn(message, cls, stacklevel=3)
