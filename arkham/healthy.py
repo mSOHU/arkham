@@ -91,14 +91,11 @@ class HealthyChecker(object):
 
 class HealthyService(RPCService):
     service_role = 'healthy'
-    healthy_config = {
-        'exchange': HealthyChecker.healthy_check_exchange,
-        'service_role': service_role,
-    }
 
     @classmethod
     def get_instance(cls, service_name):
-        ArkhamService.CONFIG['__healthy__'] = cls.healthy_config
+        conf = ArkhamService.CONFIG.setdefault(service_name, {})
+        conf['exchange'] = HealthyChecker.healthy_check_exchange
         return ArkhamService.get_instance(service_name)
 
     def check(self, routing_key):

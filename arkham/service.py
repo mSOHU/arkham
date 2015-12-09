@@ -23,7 +23,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ArkhamService(object):
-    VALID_ROLES = ('subscribe', 'publish', 'rpc', )
     REGISTRY = None
     CONFIG = {}
     CONNECTIONS = {}
@@ -51,7 +50,6 @@ class ArkhamService(object):
         conf = base_cls.CONFIG[service_name]
 
         assert 'service_role' in conf, 'service `%s` not provide service_role field' % service_name
-        assert conf['service_role'] in cls.VALID_ROLES, 'role not valid: `%s`' % conf['service_role']
 
         if cls is not ArkhamService:
             assert conf['service_role'] == cls.service_role, \
@@ -59,6 +57,7 @@ class ArkhamService(object):
 
             return cls.build_instance(service_name, conf)
         else:
+            assert conf['service_role'] in base_cls.REGISTRY, 'role not valid: `%s`' % conf['service_role']
             return base_cls.REGISTRY[conf['service_role']].build_instance(service_name, conf)
 
     @classmethod
