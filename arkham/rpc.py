@@ -15,7 +15,7 @@ import traceback
 import pika
 
 from arkham.service import ArkhamService
-from arkham.utils import load_entry_point
+from arkham.utils import load_entry_point, find_config
 
 
 LOGGER = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ def parse_arguments():
 def rpc_entry():
     cmd_args = parse_arguments()
 
-    ArkhamService.init_config(cmd_args.config_path)
+    ArkhamService.init_config(find_config(cmd_args.config_path, cmd_args.entry_point))
     server = load_entry_point(cmd_args.entry_point)
 
     assert isinstance(server, ArkhamRPCServer), 'consumer class must be subclass of ArkhamRPCServer'

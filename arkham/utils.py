@@ -48,3 +48,24 @@ class ArkhamWarning(Warning, StandardError):
     @classmethod
     def warn(cls, message):
         warnings.warn(message, cls, stacklevel=3)
+
+
+def find_config(config_path, entry_point):
+    """find config file when running in virtualenv"""
+    if config_path.startswith('/'):
+        return config_path
+
+    _path = config_path
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    _path = os.path.join('etc', config_path)
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    module = __import__(entry_point.split('.', 1)[0])
+    _path = os.path.join(os.path.dirname(module.__file__), config_path)
+    if os.path.exists(_path) and os.path.isfile(_path):
+        return _path
+
+    return _path
