@@ -14,7 +14,7 @@ import argparse
 
 from arkham.service import ArkhamService
 from arkham.healthy import HealthyCheckerMixin, HealthyChecker
-from arkham.utils import load_entry_point, ArkhamWarning, find_config
+from arkham.utils import load_entry_point, ArkhamWarning, find_config, handle_term
 
 
 def parse_arguments():
@@ -94,6 +94,12 @@ def consumer_entry():
     )
 
     inactivate_state = False
+    stop_flag = [False]
+
+    def _term_handler():
+        logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
+        stop_flag[0] = True
+    handle_term(_term_handler)
 
     for yielded in generator:
         # inactivate notice
@@ -129,6 +135,10 @@ def consumer_entry():
         else:
             if not consumer.no_ack:
                 subscriber.acknowledge(method.delivery_tag)
+
+        if stop_flag[0]:
+            logger.warning('Exiting due SIGTERM.')
+            break
 
 
 def period_callback(interval, startup_call=False, ignore_tick=False):

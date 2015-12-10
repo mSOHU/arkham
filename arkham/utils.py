@@ -9,8 +9,10 @@
 import os
 import sys
 import random
+import signal
 import warnings
 import importlib
+import traceback
 from exceptions import Warning, StandardError
 
 
@@ -69,3 +71,11 @@ def find_config(config_path, entry_point):
         return _path
 
     return _path
+
+
+def handle_term(callback):
+    def _handler(_s, frame):
+        traceback.print_stack(frame)
+        callback()
+
+    signal.signal(signal.SIGTERM, _handler)
