@@ -9,6 +9,7 @@
 import os
 import json
 import time
+import logging
 import traceback
 
 from .utils import gen_rand_string
@@ -16,18 +17,42 @@ from .rpc import RPCService
 from .service import ArkhamService
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class HealthyCheckerMixin(object):
+    logger = None
+
     @classmethod
     def health_check(cls):
         return {}
 
 
 class HealthyChecker(object):
-    healthy_check_exchange = 'exchange.healthy'
+    HEALTHY_CHECK_EXCHANGE = 'exchange.healthy'
+    SUBSCRIBER_REGISTRY = {}
 
-    def __init__(self, subscriber, consumer_cls):
-        assert issubclass(consumer_cls, HealthyCheckerMixin)
-        self.consumer_cls = consumer_cls
+    @classmethod
+    def register_checker(cls, service_name, callback, logger=None):
+        # prevent rebuild service instance
+        subscriber = cls.SUBSCRIBER_REGISTRY.get(service_name)
+        if subscriber is None:
+            subscriber = cls.SUBSCRIBER_REGISTRY[service_name] = ArkhamService.get_instance(service_name)
+
+        logger_obj = logger or LOGGER
+
+        class _Checker(HealthyCheckerMixin):
+            logger = logger_obj
+
+            @classmethod
+            def health_check(cls):
+                return callback()
+
+        cls(subscriber, _Checker).prepare_healthy_check()
+
+    def __init__(self, subscriber, mixin):
+        assert issubclass(mixin, HealthyCheckerMixin)
+        self.mixin = mixin
         self.subscriber = subscriber
         self.healthy_context = self.build_healthy_context()
         self.routing_key = '%s.%s' % (self.healthy_context['instance_id'], self.healthy_context['process_num'])
@@ -52,7 +77,7 @@ class HealthyChecker(object):
 
     def healthy_consumer(self, channel, method, properties, body):
         try:
-            payload = self.consumer_cls.health_check()
+            payload = self.mixin.health_check()
             result = {
                 'status': 'ok',
                 'message': 'success',
@@ -78,14 +103,14 @@ class HealthyChecker(object):
             channel.basic_ack(method.delivery_tag)
         except Exception as err:
             channel.basic_reject(method.delivery_tag)
-            self.consumer_cls.logger.exception(
+            self.mixin.logger.exception(
                 'Exception occurs when trying to reply healthy check. %r, %r', err, result)
 
     def prepare_healthy_check(self):
         channel = self.subscriber.make_channel()
         queue_name = 'queue.gen-%s' % gen_rand_string(22)
         channel.queue_declare(queue_name, exclusive=True, auto_delete=True)
-        channel.queue_bind(queue_name, self.healthy_check_exchange, self.routing_key)
+        channel.queue_bind(queue_name, self.HEALTHY_CHECK_EXCHANGE, self.routing_key)
         channel.basic_consume(self.healthy_consumer, queue_name)
 
 
@@ -95,7 +120,7 @@ class HealthyService(RPCService):
     @classmethod
     def get_instance(cls, service_name):
         conf = ArkhamService.CONFIG.setdefault(service_name, {})
-        conf['exchange'] = HealthyChecker.healthy_check_exchange
+        conf['exchange'] = HealthyChecker.HEALTHY_CHECK_EXCHANGE
         return ArkhamService.get_instance(service_name)
 
     def check(self, routing_key):
