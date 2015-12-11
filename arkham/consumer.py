@@ -98,8 +98,12 @@ def consumer_entry():
 
     inactivate_state = False
     stop_flag = [False]
+    consuming_flag = False
 
     def _term_handler():
+        if consuming_flag:
+            raise KeyboardInterrupt()
+
         logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
         stop_flag[0] = True
     handle_term(_term_handler)
@@ -127,6 +131,7 @@ def consumer_entry():
             body = json.loads(body, encoding='utf8')
 
         try:
+            consuming_flag = True
             if has_kwargs:
                 consumer.consume(body, headers=properties.headers, properties=properties, method=method)
             else:
@@ -138,6 +143,8 @@ def consumer_entry():
         else:
             if not consumer.no_ack:
                 subscriber.acknowledge(method.delivery_tag)
+
+        consuming_flag = False
 
         if stop_flag[0]:
             logger.warning('Exiting due SIGTERM.')
