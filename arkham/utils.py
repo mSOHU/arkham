@@ -10,6 +10,7 @@ import os
 import sys
 import random
 import signal
+import logging
 import warnings
 import importlib
 import traceback
@@ -79,3 +80,18 @@ def handle_term(callback):
         callback()
 
     signal.signal(signal.SIGTERM, _handler)
+
+
+def init_logging():
+    formatter = logging.Formatter(
+        '[%(levelname)1.1s %(asctime)s %(module)s:%(lineno)d] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    handler.setLevel(logging.INFO)
+
+    logger = logging.getLogger('arkham')
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+    logger.addHandler(handler)

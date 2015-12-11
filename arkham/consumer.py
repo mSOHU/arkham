@@ -17,6 +17,9 @@ from arkham.healthy import HealthyCheckerMixin, HealthyChecker
 from arkham.utils import load_entry_point, ArkhamWarning, find_config, handle_term
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument(dest='consumer_name', help='name of consumer service')
@@ -77,7 +80,7 @@ def consumer_entry():
     if not has_kwargs:
         ArkhamWarning.warn('consume function should have **kwargs.')
 
-    logger = consumer.logger = consumer.logger or logging
+    logger = consumer.logger = consumer.logger or LOGGER
 
     callbacks = collect_period_callbacks(consumer)
     for callback, args in callbacks.values():
