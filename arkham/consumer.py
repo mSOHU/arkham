@@ -133,9 +133,9 @@ def consumer_entry():
         try:
             consuming_flag = True
             if has_kwargs:
-                consumer.consume(body, headers=properties.headers, properties=properties, method=method)
+                consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
             else:
-                consumer.consume(body, headers=properties.headers, properties=properties)
+                consumer.consume(body, headers=properties.headers or {}, properties=properties)
         except consumer.suppress_exceptions as err:
             logger.exception('Message rejected due exception: %r' % err)
             if not consumer.no_ack:
