@@ -8,9 +8,12 @@
 
 import os
 import sys
+import json
 import random
 import signal
+import decimal
 import logging
+import datetime
 import warnings
 import importlib
 import traceback
@@ -95,3 +98,13 @@ def init_logging():
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
     logger.addHandler(handler)
+
+
+class SmartJsonEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+        elif isinstance(o, datetime.datetime):
+            return o.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            return super(SmartJsonEncoder, self).default(o)

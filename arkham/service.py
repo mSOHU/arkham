@@ -22,7 +22,7 @@ import pika
 import pika.exceptions
 from pika.adapters.blocking_connection import BlockingChannel
 
-from .utils import merge_service_config, gen_rand_string
+from .utils import merge_service_config, gen_rand_string, SmartJsonEncoder
 
 
 LOGGER = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class PublishService(ArkhamService):
             extra kwargs will put into `headers`
         """
         if isinstance(body, dict):
-            body = json.dumps(body, ensure_ascii=False)
+            body = json.dumps(body, ensure_ascii=False, cls=SmartJsonEncoder)
             kwargs['content_type'] = 'application/json'
 
         if kwargs:
