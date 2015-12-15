@@ -24,9 +24,8 @@ service_full:
   passwd: guest
   exchange: exchange_name
   routing_key: routing_key
-  service_role: subscribe | publish
+  service_role: subscribe | publish | healthy | rpc
   queue_name:  # if role is subscribe, queue_name is optional, defaults to random string
-  strategy: channel | connection  # defaults to one channel pre instance
   extra_params:  # applies in ConnectionParameters
   connection_params:  # applies while build Connection object
   declare:

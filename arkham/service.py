@@ -4,6 +4,12 @@
 """
 @author: johnxu
 @date: 10/21/2015 11:38 AM
+
+
+@author: johnxu
+@date: 12/15/2015 11:05 AM
+
+cleanup code
 """
 
 
@@ -55,14 +61,11 @@ class ArkhamService(object):
             assert conf['service_role'] == cls.service_role, \
                 'invalid role, plz use `%s`' % base_cls.REGISTRY[conf['service_role']].__name__
 
-            return cls.build_instance(service_name, conf)
+            return cls(service_name, conf)
         else:
             assert conf['service_role'] in base_cls.REGISTRY, 'role not valid: `%s`' % conf['service_role']
-            return base_cls.REGISTRY[conf['service_role']].build_instance(service_name, conf)
-
-    @classmethod
-    def build_instance(cls, service_name, conf):
-        return cls(service_name, conf)
+            service_cls = base_cls.REGISTRY[conf['service_role']]
+            return service_cls(service_name, conf)
 
     @classmethod
     def make_connection(cls, conf):
@@ -81,23 +84,10 @@ class ArkhamService(object):
         parameters = pika.ConnectionParameters(**params)
         return pika.BlockingConnection(parameters, **conf.get('connection_params', {}))
 
-    @classmethod
-    def get_connection(cls, name, conf, force_instance=False):
-        strategy = conf.get('strategy', 'channel')
-        if strategy == 'connection':
-            return cls.make_connection(conf)
-
-        if not force_instance and name in cls.CONNECTIONS:
-            return cls.CONNECTIONS[name]
-
-        # FIXME: breaks shared connections
-        cls.CONNECTIONS[name] = cls.make_connection(conf)
-        return cls.CONNECTIONS[name]
-
     def __init__(self, name, conf):
         self.name = name
         self.conf = conf
-        self.connection = self.get_connection(name, conf)
+        self.connection = self.make_connection(conf)
         self.channel = self.connection.channel()
         self.handle_declarations()
 
@@ -109,7 +99,7 @@ class ArkhamService(object):
             channel = self.connection.channel()
         except (KeyError, pika.exceptions.ConnectionClosed):
             LOGGER.info('Connection closed for `%s`', self.name)
-            self.connection = self.get_connection(self.name, self.conf, force_instance=True)
+            self.connection = self.make_connection(self.conf)
             channel = self.connection.channel()
 
         return channel
@@ -147,11 +137,19 @@ class ArkhamService(object):
 
 
 def handle_closed(fn):
+    """handle closed connection / channel only once
+    """
     @functools.wraps(fn)
     def _wrapper(self, *args, **kwargs):
+        if self.connection.is_closed:
+            LOGGER.warning('handle_closed: Connection already closed.')
+            self.connection = self.make_connection(self.conf)
+            self.channel = self.connection.channel()
+
         try:
             return fn(self, *args, **kwargs)
-        except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed):
+        except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as err:
+            LOGGER.warning('handle_closed: %s, due %r', type(err).__name__, err)
             self.channel = self.make_channel()
 
         return fn(self, *args, **kwargs)

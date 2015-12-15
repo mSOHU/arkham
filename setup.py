@@ -4,18 +4,18 @@
 from setuptools import setup, find_packages
 
 
-long_description = """
+description = """
 Elizabeth Arkham Asylum for the Criminally Insane
 """
 
 setup(
     name='arkham',
     version='___version___',
-    description=long_description,
-    long_description=long_description,
+    description=description,
+    long_description=description,
     author='the S.H.I.E.L.D TEAM',
     author_email='waptech@sohu-inc.com',
-    url='http://m.sohu.com',
+    url='https://github.com/mSOHU/arkham',
     packages=find_packages(),
     install_requires=[
         'pyyaml',
