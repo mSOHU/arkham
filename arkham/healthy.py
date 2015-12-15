@@ -121,7 +121,7 @@ class HealthyService(RPCService):
     def get_instance(cls, service_name):
         conf = ArkhamService.CONFIG.setdefault(service_name, {})
         conf['exchange'] = HealthyChecker.HEALTHY_CHECK_EXCHANGE
-        return ArkhamService.get_instance(service_name)
+        return super(cls, cls).get_instance(service_name)
 
     def check(self, routing_key):
         return self.call('', routing_key=routing_key)
