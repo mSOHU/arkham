@@ -92,7 +92,7 @@ class ArkhamService(object):
         self.connect_callbacks = []
         self.handle_declarations()
 
-    def add_connect_callback(self, callback, initial=False):
+    def add_connect_callback(self, callback, initial=True):
         """
         :param initial: should callback called first time
         TODO: maybe event

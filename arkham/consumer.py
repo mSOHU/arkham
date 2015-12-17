@@ -82,15 +82,6 @@ def consumer_entry():
 
     logger = consumer.logger = consumer.logger or LOGGER
 
-    callbacks = collect_period_callbacks(consumer)
-    for callback, args in callbacks.values():
-        apply_period_callback(subscriber.connection._impl, callback, args, logger)
-
-    try:
-        HealthyChecker(subscriber, consumer).prepare_healthy_check()
-    except AssertionError as err:
-        logger.warning('Error preparing healthy checker: %s', err.message)
-
     inactivate_state = False
     stop_flag = [False]
     consuming_flag = False
@@ -103,21 +94,32 @@ def consumer_entry():
         stop_flag[0] = True
     handle_term(_term_handler)
 
-    generator = subscriber.consume(
-        no_ack=consumer.no_ack,
-        inactivity_timeout=consumer.inactivity_timeout
-    )
+    generator = [None]
+
+    def _on_connect():
+        callbacks = collect_period_callbacks(consumer)
+        for callback, args in callbacks.values():
+            apply_period_callback(subscriber.connection._impl, callback, args, logger)
+
+        try:
+            HealthyChecker(subscriber, consumer).prepare_healthy_check()
+        except AssertionError as _err:
+            logger.warning('Error preparing healthy checker: %s', _err.message)
+
+        generator[0] = subscriber.consume(
+            no_ack=consumer.no_ack,
+            inactivity_timeout=consumer.inactivity_timeout
+        )
+    subscriber.add_connect_callback(_on_connect)
 
     while True:
         # fetch message
         try:
             with subscriber.ensure_service():
-                yielded = next(generator)
+                yielded = next(generator[0])
         except ArkhamService.ConnectionReset:
-            generator = subscriber.consume(
-                no_ack=consumer.no_ack,
-                inactivity_timeout=consumer.inactivity_timeout
-            )
+            LOGGER.error('Cannot connect to rabbit server, sleep 1 sec...')
+            time.sleep(1)
             continue
 
         # inactivate notice
