@@ -91,11 +91,6 @@ def consumer_entry():
     except AssertionError as err:
         logger.warning('Error preparing healthy checker: %s', err.message)
 
-    generator = subscriber.consume(
-        no_ack=consumer.no_ack,
-        inactivity_timeout=consumer.inactivity_timeout
-    )
-
     inactivate_state = False
     stop_flag = [False]
     consuming_flag = False
@@ -108,7 +103,23 @@ def consumer_entry():
         stop_flag[0] = True
     handle_term(_term_handler)
 
-    for yielded in generator:
+    generator = subscriber.consume(
+        no_ack=consumer.no_ack,
+        inactivity_timeout=consumer.inactivity_timeout
+    )
+
+    while True:
+        # fetch message
+        try:
+            with subscriber.ensure_service():
+                yielded = next(generator)
+        except ArkhamService.ConnectionReset:
+            generator = subscriber.consume(
+                no_ack=consumer.no_ack,
+                inactivity_timeout=consumer.inactivity_timeout
+            )
+            continue
+
         # inactivate notice
         if not yielded:
             if inactivate_state:
@@ -177,6 +188,7 @@ class ArkhamConsumer(HealthyCheckerMixin):
     service_instances = {}
     logger = None
     heartbeat_interval = None
+    prefetch = 0
 
     @classmethod
     def get_service(cls, service_name, force=False):
