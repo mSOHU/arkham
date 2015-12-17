@@ -7,9 +7,9 @@
 
 
 @author: johnxu
-@date: 12/15/2015 11:05 AM
+@date: 12/17/2015 11:05 AM
 
-cleanup code
+refactored reconnect logic
 """
 
 
