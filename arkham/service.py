@@ -23,8 +23,7 @@ import pika.exceptions
 from pika.adapters.blocking_connection import BlockingChannel
 
 from .utils import (
-    merge_service_config, gen_rand_string, SmartJsonEncoder,
-    handle_closed, CLOSED_EXCEPTIONS
+    merge_service_config, gen_rand_string, SmartJsonEncoder, handle_closed
 )
 
 
@@ -90,43 +89,45 @@ class ArkhamService(object):
     def __init__(self, name, conf):
         self.name = name
         self.conf = conf
-        self.connection = self.make_connection(conf)
-        self.channel = self.connection.channel()
+        self.connect_callbacks = []
         self.handle_declarations()
 
-    def ensure_connection(self):
-        if self.connection.is_closed:
-            LOGGER.warning('ensure_connection: Connection closed. Reopening...')
-            self.connection = self.make_connection(self.conf)
-            self.channel = self.connection.channel()
+    def add_connect_callback(self, callback, initial=False):
+        """
+        :param initial: should callback called first time
+        TODO: maybe event
+        """
+        self.connect_callbacks.append(callback)
+        if initial:
+            callback()
 
+    def invoke_connect_callback(self):
+        for callback in self.connect_callbacks:
+            callback()
+
+    @handle_closed
     def make_channel(self):
         """
         :rtype: BlockingChannel
         """
-        self.ensure_connection()
-
-        try:
-            channel = self.connection.channel()
-        except (KeyError, pika.exceptions.ConnectionClosed):
-            LOGGER.info('Connection closed for `%s`', self.name)
-            self.connection = self.make_connection(self.conf)
-            channel = self.connection.channel()
-
-        return channel
+        return self.connection.channel()
 
     class ConnectionReset(Exception):
         pass
 
     @contextlib.contextmanager
     def ensure_service(self):
-        self.ensure_connection()
+        if not self.connection or self.connection.is_closed:
+            LOGGER.warning('ensure_service: Connection Closed, Reopening...')
+            self.connection = self.make_connection(self.conf)
+            self.channel = self.connection.channel()
+            self.invoke_connect_callback()
 
         try:
             yield
-        except CLOSED_EXCEPTIONS as err:
-            LOGGER.warning('ensure_service: %s, due %r', type(err).__name__, err)
-            self.channel = self.make_channel()
+        except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as err:
+            LOGGER.exception('ensure_service: %s, due %r', type(err).__name__, err)
+            self.connection = self.channel = None
             raise self.ConnectionReset()
 
     def handle_declarations(self):
@@ -213,6 +214,7 @@ class PublishService(ArkhamService):
 class SubscribeService(ArkhamService):
     service_role = 'subscribe'
 
+    @handle_closed
     def handle_declarations(self):
         super(SubscribeService, self).handle_declarations()
 

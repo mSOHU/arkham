@@ -20,8 +20,6 @@ import importlib
 import traceback
 from exceptions import Warning, StandardError
 
-import pika.exceptions
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -106,23 +104,18 @@ def init_logging():
     logger.addHandler(handler)
 
 
-CLOSED_EXCEPTIONS = (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed)
-
-
 def handle_closed(fn):
     """handle closed connection / channel only once
     """
     @functools.wraps(fn)
     def _wrapper(self, *args, **kwargs):
-        self.ensure_connection()
-
         try:
-            return fn(self, *args, **kwargs)
-        except CLOSED_EXCEPTIONS as err:
-            LOGGER.warning('handle_closed: %s, due %r', type(err).__name__, err)
-            self.channel = self.make_channel()
+            with self.ensure_service():
+                return fn(self, *args, **kwargs)
+        except self.ConnectionReset:
+            with self.ensure_service():
+                return fn(self, *args, **kwargs)
 
-        return fn(self, *args, **kwargs)
     return _wrapper
 
 
