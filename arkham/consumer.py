@@ -106,6 +106,7 @@ def consumer_entry():
         for callback, args in callbacks.values():
             apply_period_callback(subscriber.connection._impl, callback, args, logger)
 
+        subscriber.channel.basic_qos(prefetch_count=consumer.prefetch_count)
         generator[0] = subscriber.consume(
             no_ack=consumer.no_ack,
             inactivity_timeout=consumer.inactivity_timeout
@@ -190,6 +191,7 @@ class ArkhamConsumer(HealthyCheckerMixin):
     service_instances = {}
     logger = None
     heartbeat_interval = None
+    prefetch_count = 0
 
     @classmethod
     def get_service(cls, service_name, force=False):
