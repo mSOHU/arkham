@@ -108,7 +108,6 @@ class ArkhamService(object):
             except Exception as err:
                 LOGGER.exception('Error calling connect callback: %r, %r', callback, err)
 
-    @handle_closed
     def make_channel(self):
         """
         :rtype: BlockingChannel
