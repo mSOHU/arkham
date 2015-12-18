@@ -50,10 +50,10 @@ class HealthyChecker(object):
 
         cls(subscriber, _Checker).prepare_healthy_check()
 
-    def __init__(self, subscriber, mixin):
+    def __init__(self, service, mixin):
         assert issubclass(mixin, HealthyCheckerMixin)
         self.mixin = mixin
-        self.subscriber = subscriber
+        self.service = service
         self.healthy_context = self.build_healthy_context()
         self.routing_key = '%s.%s' % (self.healthy_context['instance_id'], self.healthy_context['process_num'])
 
@@ -107,7 +107,10 @@ class HealthyChecker(object):
                 'Exception occurs when trying to reply healthy check. %r, %r', err, result)
 
     def prepare_healthy_check(self):
-        channel = self.subscriber.make_channel()
+        self.service.add_connect_callback(self._setup_healthy_consumer)
+
+    def _setup_healthy_consumer(self):
+        channel = self.service.make_channel()
         queue_name = 'queue.gen-%s' % gen_rand_string(22)
         channel.queue_declare(queue_name, exclusive=True, auto_delete=True)
         channel.queue_bind(queue_name, self.HEALTHY_CHECK_EXCHANGE, self.routing_key)

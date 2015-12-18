@@ -103,7 +103,10 @@ class ArkhamService(object):
 
     def invoke_connect_callback(self):
         for callback in self.connect_callbacks:
-            callback()
+            try:
+                callback()
+            except Exception as err:
+                LOGGER.exception('Error calling connect callback: %r, %r', callback, err)
 
     @handle_closed
     def make_channel(self):
@@ -127,6 +130,8 @@ class ArkhamService(object):
             yield
         except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as err:
             LOGGER.exception('ensure_service: %s, due %r', type(err).__name__, err)
+            # FIXME: close connection if channel is closed,
+            # but simpler for implements connect callbacks
             self.connection = self.channel = None
             raise self.ConnectionReset()
 

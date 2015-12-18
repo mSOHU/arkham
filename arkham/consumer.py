@@ -94,17 +94,17 @@ def consumer_entry():
         stop_flag[0] = True
     handle_term(_term_handler)
 
+    try:
+        HealthyChecker(subscriber, consumer).prepare_healthy_check()
+    except AssertionError as _err:
+        logger.warning('Error preparing healthy checker: %s', _err.message)
+
     generator = [None]
 
     def _on_connect():
         callbacks = collect_period_callbacks(consumer)
         for callback, args in callbacks.values():
             apply_period_callback(subscriber.connection._impl, callback, args, logger)
-
-        try:
-            HealthyChecker(subscriber, consumer).prepare_healthy_check()
-        except AssertionError as _err:
-            logger.warning('Error preparing healthy checker: %s', _err.message)
 
         generator[0] = subscriber.consume(
             no_ack=consumer.no_ack,
@@ -190,7 +190,6 @@ class ArkhamConsumer(HealthyCheckerMixin):
     service_instances = {}
     logger = None
     heartbeat_interval = None
-    prefetch = 0
 
     @classmethod
     def get_service(cls, service_name, force=False):
