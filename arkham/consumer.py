@@ -64,7 +64,6 @@ class BaseWorker(object):
     def __init__(self, runner):
         self.runner = runner
         self.consumer = runner.consumer
-        self.subscriber = runner.subscriber
         self.initialize()
 
     def initialize(self):
@@ -136,8 +135,8 @@ class ArkhamConsumerRunner(object):
         self.generator = []
 
         worker_class = WORKER_CLASSES[self.consumer.worker_class]
+        self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_class)
         self.worker = worker_class(self)
-        assert isinstance(self.worker, BaseWorker)
 
         ArkhamService.init_config(config_path)
         self.subscriber = ArkhamService.get_instance(consumer_name)
@@ -156,9 +155,14 @@ class ArkhamConsumerRunner(object):
     def _term_handler(self):
         if not self.worker.is_running():
             self.logger.warning('SIGTERM received. Exiting...')
-            self.subscriber.connection.close()
+            ioloop = self.subscriber.connection._impl
 
-        self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
+            def closer():
+                ioloop.close(reply_text='User requested exit due signal SIGTERM')
+
+            ioloop.add_timeout(0, closer)
+        else:
+            self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
         self.stop_flag = True
 
     def setup_consumer(self):
@@ -195,8 +199,9 @@ class ArkhamConsumerRunner(object):
                 with self.subscriber.ensure_service():
                     yielded = next(self.generator)
             except ArkhamService.ConnectionReset:
-                LOGGER.error('Cannot connect to rabbit server, sleep 1 sec...')
-                time.sleep(1)
+                if not self.stop_flag:
+                    LOGGER.error('Cannot connect to rabbit server, sleep 1 sec...')
+                    time.sleep(1)
                 continue
 
             # inactivate notice
