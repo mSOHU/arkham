@@ -128,7 +128,9 @@ class ArkhamService(object):
         try:
             yield
         except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as err:
-            LOGGER.exception('ensure_service: %s, due %r', type(err).__name__, err)
+            # user operation will not trigger connection close, so no stack trace
+            log_fn = LOGGER.exception if isinstance(err, pika.exceptions.ChannelClosed) else LOGGER.error
+            log_fn('ensure_service: %s, due %r', type(err).__name__, err)
             # FIXME: close connection if channel is closed,
             # but simpler for implements connect callbacks
             self.connection = self.channel = None
