@@ -124,16 +124,8 @@ WORKER_CLASSES = {
 
 
 class ArkhamConsumerRunner(object):
-    def __init__(self):
-        cmd_args = self.parse_arguments()
-        self.consumer = load_entry_point(cmd_args.entry_point)
-
-        assert inspect.isclass(self.consumer), 'consumer must be a class'
-        assert issubclass(self.consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamConsumer'
-        has_kwargs = bool(inspect.getargspec(self.consumer.consume.im_func).keywords)
-        if not has_kwargs:
-            ArkhamWarning.warn('consume function should have **kwargs.')
-
+    def __init__(self, consumer, config_path, consumer_name):
+        self.consumer = consumer
         self.logger = self.consumer.logger = self.consumer.logger or LOGGER
 
         # setup flags
@@ -147,8 +139,8 @@ class ArkhamConsumerRunner(object):
         self.worker = worker_class(self)
         assert isinstance(self.worker, BaseWorker)
 
-        ArkhamService.init_config(find_config(cmd_args.config_path, cmd_args.entry_point))
-        self.subscriber = ArkhamService.get_instance(cmd_args.consumer_name)
+        ArkhamService.init_config(config_path)
+        self.subscriber = ArkhamService.get_instance(consumer_name)
 
         handle_term(self._term_handler)
         self.setup_healthy_checker()
@@ -168,14 +160,6 @@ class ArkhamConsumerRunner(object):
 
         self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
         self.stop_flag = True
-
-    @classmethod
-    def parse_arguments(cls):
-        parser = argparse.ArgumentParser()
-        parser.add_argument(dest='consumer_name', help='name of consumer service')
-        parser.add_argument('-c', '--config', dest='config_path', required=True, help='full path of config.yaml')
-        parser.add_argument('-e', '--entry', dest='entry_point', required=True, help='full entry class path')
-        return parser.parse_args()
 
     def setup_consumer(self):
         def _on_connect():
@@ -258,6 +242,32 @@ def period_callback(interval, startup_call=False, ignore_tick=False):
         }
         return fn
     return _decorator
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(dest='consumer_name', help='name of consumer service')
+    parser.add_argument('-c', '--config', dest='config_path', required=True, help='full path of config.yaml')
+    parser.add_argument('-e', '--entry', dest='entry_point', required=True, help='full entry class path')
+    return parser.parse_args()
+
+
+def consumer_entry():
+    cmd_args = parse_arguments()
+    consumer = load_entry_point(cmd_args.entry_point)
+
+    assert inspect.isclass(consumer), 'consumer must be a class'
+    assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamConsumer'
+    has_kwargs = bool(inspect.getargspec(consumer.consume.im_func).keywords)
+    if not has_kwargs:
+        ArkhamWarning.warn('consume function should have **kwargs.')
+
+    runner = ArkhamConsumerRunner(
+        consumer,
+        find_config(cmd_args.config_path, cmd_args.entry_point),
+        cmd_args.consumer_name
+    )
+    runner.start()
 
 
 class ArkhamConsumer(HealthyCheckerMixin):
