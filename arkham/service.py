@@ -120,7 +120,7 @@ class ArkhamService(object):
     @contextlib.contextmanager
     def ensure_service(self):
         if not self.connection or self.connection.is_closed:
-            LOGGER.warning('ensure_service: Connection Closed, Reopening...')
+            LOGGER.warning('ensure_service: Opening connection...')
             self.connection = self.make_connection(self.conf)
             self.channel = self.connection.channel()
             self.invoke_connect_callback()
