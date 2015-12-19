@@ -11,6 +11,7 @@ import time
 import inspect
 import logging
 import argparse
+import contextlib
 
 from arkham.service import ArkhamService
 from arkham.healthy import HealthyCheckerMixin, HealthyChecker
@@ -18,14 +19,6 @@ from arkham.utils import load_entry_point, ArkhamWarning, find_config, handle_te
 
 
 LOGGER = logging.getLogger(__name__)
-
-
-def parse_arguments():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(dest='consumer_name', help='name of consumer service')
-    parser.add_argument('-c', '--config', dest='config_path', required=True, help='full path of config.yaml')
-    parser.add_argument('-e', '--entry', dest='entry_point', required=True, help='full entry class path')
-    return parser.parse_args()
 
 
 def collect_period_callbacks(consumer):
@@ -67,102 +60,187 @@ def apply_period_callback(ioloop, callback, args, logger):
     ioloop.add_timeout(_start_timeout, _wrapper)
 
 
-def consumer_entry():
-    cmd_args = parse_arguments()
+class BaseWorker(object):
+    def __init__(self, runner):
+        self.runner = runner
+        self.consumer = runner.consumer
+        self.subscriber = runner.subscriber
+        self.initialize()
 
-    ArkhamService.init_config(find_config(cmd_args.config_path, cmd_args.entry_point))
-    subscriber = ArkhamService.get_instance(cmd_args.consumer_name)
-    consumer = load_entry_point(cmd_args.entry_point)
+    def initialize(self):
+        pass
 
-    assert inspect.isclass(consumer), 'consumer must be a class'
-    assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamService'
-    has_kwargs = bool(inspect.getargspec(consumer.consume.im_func).keywords)
-    if not has_kwargs:
-        ArkhamWarning.warn('consume function should have **kwargs.')
+    def spawn(self, method, properties, body):
+        raise NotImplementedError()
 
-    logger = consumer.logger = consumer.logger or LOGGER
+    def is_running(self):
+        raise NotImplementedError()
 
-    inactivate_state = False
-    stop_flag = [False]
-    consuming_flag = False
+    def join(self):
+        raise NotImplementedError()
 
-    def _term_handler():
-        if consuming_flag:
-            raise KeyboardInterrupt()
 
-        logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
-        stop_flag[0] = True
-    handle_term(_term_handler)
+class GeventWorker(BaseWorker):
+    pool = None
 
-    try:
-        HealthyChecker(subscriber, consumer).prepare_healthy_check()
-    except AssertionError as _err:
-        logger.warning('Error preparing healthy checker: %s', _err.message)
+    def initialize(self):
+        import gevent.monkey
+        gevent.monkey.patch_all()
 
-    generator = [None]
+        import gevent.pool
+        self.pool = gevent.pool.Pool(self.consumer.prefetch_count)
 
-    def _on_connect():
-        callbacks = collect_period_callbacks(consumer)
-        for callback, args in callbacks.values():
-            apply_period_callback(subscriber.connection._impl, callback, args, logger)
+    def spawn(self, method, properties, body):
+        def _wrapper():
+            with self.runner.work_context(method):
+                self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
 
-        subscriber.channel.basic_qos(prefetch_count=consumer.prefetch_count)
-        generator[0] = subscriber.consume(
-            no_ack=consumer.no_ack,
-            inactivity_timeout=consumer.inactivity_timeout
-        )
-    subscriber.add_connect_callback(_on_connect)
+        self.pool.spawn(_wrapper)
+        self.pool.wait_available()
 
-    while True:
-        # fetch message
+    def is_running(self):
+        return bool(len(self.pool))
+
+    def join(self):
+        return self.pool.join()
+
+
+class SyncWorker(BaseWorker):
+    def spawn(self, method, properties, body):
+        with self.runner.work_context(method):
+            self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
+
+    def is_running(self):
+        return False
+
+    def join(self):
+        return
+
+
+WORKER_CLASSES = {
+    'gevent': GeventWorker,
+    'sync': SyncWorker,
+}
+
+
+class ArkhamConsumerRunner(object):
+    def __init__(self):
+        cmd_args = self.parse_arguments()
+        self.consumer = load_entry_point(cmd_args.entry_point)
+
+        assert inspect.isclass(self.consumer), 'consumer must be a class'
+        assert issubclass(self.consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamConsumer'
+        has_kwargs = bool(inspect.getargspec(self.consumer.consume.im_func).keywords)
+        if not has_kwargs:
+            ArkhamWarning.warn('consume function should have **kwargs.')
+
+        self.logger = self.consumer.logger = self.consumer.logger or LOGGER
+
+        # setup flags
+        self.inactivate_state = False
+        self.stop_flag = False
+
+        # for IDE
+        self.generator = []
+
+        worker_class = WORKER_CLASSES[self.consumer.worker_class]
+        self.worker = worker_class(self)
+        assert isinstance(self.worker, BaseWorker)
+
+        ArkhamService.init_config(find_config(cmd_args.config_path, cmd_args.entry_point))
+        self.subscriber = ArkhamService.get_instance(cmd_args.consumer_name)
+
+        handle_term(self._term_handler)
+        self.setup_healthy_checker()
+
+        self.callbacks = collect_period_callbacks(self.consumer)
+
+    def setup_healthy_checker(self):
         try:
-            with subscriber.ensure_service():
-                yielded = next(generator[0])
-        except ArkhamService.ConnectionReset:
-            LOGGER.error('Cannot connect to rabbit server, sleep 1 sec...')
-            time.sleep(1)
-            continue
+            HealthyChecker(self.subscriber, self.consumer).prepare_healthy_check()
+        except AssertionError as _err:
+            self.logger.warning('Error preparing healthy checker: %s', _err.message)
 
-        # inactivate notice
-        if not yielded:
-            if inactivate_state:
+    def _term_handler(self):
+        if not self.worker.is_running():
+            self.logger.warning('SIGTERM received. Exiting...')
+            self.subscriber.connection.close()
+
+        self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
+        self.stop_flag = True
+
+    @classmethod
+    def parse_arguments(cls):
+        parser = argparse.ArgumentParser()
+        parser.add_argument(dest='consumer_name', help='name of consumer service')
+        parser.add_argument('-c', '--config', dest='config_path', required=True, help='full path of config.yaml')
+        parser.add_argument('-e', '--entry', dest='entry_point', required=True, help='full entry class path')
+        return parser.parse_args()
+
+    def setup_consumer(self):
+        def _on_connect():
+            ioloop = self.subscriber.connection._impl
+            for callback, args in self.callbacks.values():
+                apply_period_callback(ioloop, callback, args, self.logger)
+
+            self.subscriber.channel.basic_qos(prefetch_count=self.consumer.prefetch_count)
+            self.generator = self.subscriber.consume(
+                no_ack=self.consumer.no_ack,
+                inactivity_timeout=self.consumer.inactivity_timeout
+            )
+        self.subscriber.add_connect_callback(_on_connect)
+
+    @contextlib.contextmanager
+    def work_context(self, method):
+        try:
+            yield
+        except self.consumer.suppress_exceptions as err:
+            self.logger.exception('Message rejected due exception: %r' % err)
+            if not self.consumer.no_ack:
+                self.subscriber.reject(method.delivery_tag)
+        else:
+            if not self.consumer.no_ack:
+                self.subscriber.acknowledge(method.delivery_tag)
+
+    def start(self):
+        self.setup_consumer()
+
+        while not self.stop_flag:
+            # fetch message
+            try:
+                with self.subscriber.ensure_service():
+                    yielded = next(self.generator)
+            except ArkhamService.ConnectionReset:
+                LOGGER.error('Cannot connect to rabbit server, sleep 1 sec...')
+                time.sleep(1)
                 continue
 
-            try:
-                consumer.inactivate()
-                # make sure inactivate handler will be called successfully
-                inactivate_state = True
-            except Exception as err:
-                logger.exception('Exception occurs in inactivate handler: %r' % err)
+            # inactivate notice
+            if not yielded:
+                if self.inactivate_state:
+                    continue
 
-            continue
+                try:
+                    self.consumer.inactivate()
+                    # make sure inactivate handler will be called successfully
+                    inactivate_state = True
+                except Exception as err:
+                    self.logger.exception('Exception occurs in inactivate handler: %r' % err)
 
-        # if yielded is not None, reset inactivate_state flag
-        inactivate_state = False
-        method, properties, body = yielded
+                continue
 
-        if properties.content_type == 'application/json' and isinstance(body, str):
-            body = json.loads(body, encoding='utf8')
+            # if yielded is not None, reset inactivate_state flag
+            self.inactivate_state = False
 
-        try:
-            consuming_flag = True
-            if has_kwargs:
-                consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
-            else:
-                consumer.consume(body, headers=properties.headers or {}, properties=properties)
-        except consumer.suppress_exceptions as err:
-            logger.exception('Message rejected due exception: %r' % err)
-            if not consumer.no_ack:
-                subscriber.reject(method.delivery_tag)
-        else:
-            if not consumer.no_ack:
-                subscriber.acknowledge(method.delivery_tag)
+            # and spawn worker
+            method, properties, body = yielded
+            if properties.content_type == 'application/json' and isinstance(body, str):
+                body = json.loads(body, encoding='utf8')
 
-        consuming_flag = False
+            self.worker.spawn(method, properties, body)
 
-        if stop_flag[0]:
-            logger.warning('Exiting due SIGTERM.')
-            break
+        # before exit
+        self.worker.join()
 
 
 def period_callback(interval, startup_call=False, ignore_tick=False):
@@ -192,6 +270,10 @@ class ArkhamConsumer(HealthyCheckerMixin):
     logger = None
     heartbeat_interval = None
     prefetch_count = 0
+
+    # 'sync' or 'gevent'
+    # will spawn greenlet for consume, pool size will be `prefetch_count`
+    worker_class = 'sync'
 
     @classmethod
     def get_service(cls, service_name, force=False):

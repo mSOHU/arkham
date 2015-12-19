@@ -1,3 +1,4 @@
 -f http://pypi.m.sohu.com/
 pika
 pyyaml
+gevent
