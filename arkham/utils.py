@@ -87,6 +87,7 @@ def handle_term(callback):
         callback()
 
     signal.signal(signal.SIGTERM, _handler)
+    signal.signal(signal.SIGINT, _handler)
 
 
 def init_logging():
