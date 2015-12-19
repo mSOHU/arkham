@@ -141,7 +141,7 @@ class ArkhamConsumerRunner(object):
         ArkhamService.init_config(config_path)
         self.subscriber = ArkhamService.get_instance(consumer_name)
 
-        handle_term(self._term_handler)
+        self.setup_signal_handler()
         self.setup_healthy_checker()
 
         self.callbacks = collect_period_callbacks(self.consumer)
@@ -152,18 +152,20 @@ class ArkhamConsumerRunner(object):
         except AssertionError as _err:
             self.logger.warning('Error preparing healthy checker: %s', _err.message)
 
-    def _term_handler(self):
-        if not self.worker.is_running():
-            self.logger.warning('SIGTERM received. Exiting...')
-            ioloop = self.subscriber.connection._impl
+    def setup_signal_handler(self):
+        def _term_handler():
+            if not self.worker.is_running():
+                self.logger.warning('SIGTERM received. Exiting...')
+                ioloop = self.subscriber.connection._impl
 
-            def closer():
-                ioloop.close(reply_text='User requested exit due signal SIGTERM')
+                def _close_fn():
+                    ioloop.close(reply_text='User requested exit due signal SIGTERM')
 
-            ioloop.add_timeout(0, closer)
-        else:
-            self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
-        self.stop_flag = True
+                ioloop.add_timeout(0, _close_fn)
+            else:
+                self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
+            self.stop_flag = True
+        handle_term(_term_handler)
 
     def setup_consumer(self):
         def _on_connect():
