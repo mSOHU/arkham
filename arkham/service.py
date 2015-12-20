@@ -24,7 +24,7 @@ from pika.adapters.blocking_connection import BlockingChannel
 
 from .utils import (
     merge_service_config, gen_rand_string,
-    SmartJsonEncoder, handle_closed, init_logging
+    SmartJsonEncoder, handle_closed
 )
 
 
@@ -42,7 +42,6 @@ class ArkhamService(object):
 
     @classmethod
     def init_config(cls, config):
-        init_logging()
         if isinstance(config, basestring):
             with open(config, 'rb') as fp:
                 config = yaml.load(fp)
