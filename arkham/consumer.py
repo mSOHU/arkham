@@ -98,8 +98,10 @@ class GeventWorker(BaseWorker):
         gevent.monkey.patch_all()
 
         import gevent.pool
-        self.pool = gevent.pool.Pool(self.consumer.prefetch_count + 1)
-        self.pool.spawn(self.loop_watcher)
+        self.pool = gevent.pool.Pool(self.consumer.prefetch_count)
+
+        import gevent
+        gevent.spawn(self.loop_watcher).start()
 
     def spawn(self, method, properties, body):
         def _wrapper():
@@ -107,7 +109,7 @@ class GeventWorker(BaseWorker):
                 self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
 
         self.pool.spawn(_wrapper)
-        self.logger.debug('%s: pool size %s', self.__class__.__name__, len(self.pool) - 1)
+        self.logger.debug('Gevent pool_size: %s', len(self.pool))
         self.pool.wait_available()
 
     def is_running(self):
