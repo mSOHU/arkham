@@ -64,6 +64,7 @@ class BaseWorker(object):
     def __init__(self, runner):
         self.runner = runner
         self.consumer = runner.consumer
+        self.logger = runner.consumer.logger
         self.initialize()
 
     def initialize(self):
@@ -95,6 +96,7 @@ class GeventWorker(BaseWorker):
                 self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
 
         self.pool.spawn(_wrapper)
+        self.logger.debug('%r: pool size %s', self, len(self.pool))
         self.pool.wait_available()
 
     def is_running(self):
@@ -126,6 +128,7 @@ class ArkhamConsumerRunner(object):
     def __init__(self, consumer, config_path, consumer_name):
         self.consumer = consumer
         self.logger = self.consumer.logger = self.consumer.logger or LOGGER
+        self.logger.setLevel(getattr(logging, self.consumer.log_level))
 
         # setup flags
         self.inactivate_state = False
@@ -134,6 +137,7 @@ class ArkhamConsumerRunner(object):
         # for IDE
         self.generator = []
 
+        # early initialize worker so gevent can patch in time.
         worker_class = WORKER_CLASSES[self.consumer.worker_class]
         self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_class)
         self.worker = worker_class(self)
@@ -185,12 +189,15 @@ class ArkhamConsumerRunner(object):
         try:
             yield
         except self.consumer.suppress_exceptions as err:
-            self.logger.exception('Message rejected due exception: %r' % err)
+            self.logger.exception('Exception `%r` suppressed while processing message.', err)
+        except Exception as err:
+            self.logger.exception('Message rejected due exception: %r', err)
             if not self.consumer.no_ack:
-                self.subscriber.reject(method.delivery_tag)
-        else:
-            if not self.consumer.no_ack:
-                self.subscriber.acknowledge(method.delivery_tag)
+                self.subscriber.reject(method.delivery_tag, requeue=self.consumer.requeue_on_exception)
+            return
+
+        if not self.consumer.no_ack:
+            self.subscriber.acknowledge(method.delivery_tag)
 
     def start(self):
         self.setup_consumer()
@@ -199,7 +206,16 @@ class ArkhamConsumerRunner(object):
             # fetch message
             try:
                 with self.subscriber.ensure_service():
-                    yielded = next(self.generator)
+                    try:
+                        yielded = next(self.generator)
+                    except StopIteration:
+                        #  consumer cancel notification
+                        LOGGER.warning('Consumer been canceled. Trying to re-consume...')
+                        self.generator = self.subscriber.consume(
+                            no_ack=self.consumer.no_ack,
+                            inactivity_timeout=self.consumer.inactivity_timeout
+                        )
+                        continue
             except ArkhamService.ConnectionReset:
                 if not self.stop_flag:
                     LOGGER.error('Cannot connect to rabbit server, sleep 1 sec...')
@@ -279,12 +295,20 @@ def consumer_entry():
 
 class ArkhamConsumer(HealthyCheckerMixin):
     no_ack = False
+    # if exception raised already listed in `suppress_exceptions`
+    # message will be ack-ed, exception will only be printed
+    # else message will be reject
     suppress_exceptions = ()
+
+    # if exception cannot be ignored, the `requeue_on_exception` indicates
+    # whether message will be rejected w/ or w/o requeue-ing
+    requeue_on_exception = False
 
     # int / float. if set, will call ArkhamConsumer.inactivate when timed-out
     inactivity_timeout = None
     service_instances = {}
     logger = None
+    log_level = 'WARNING'
     heartbeat_interval = None
     prefetch_count = 0
 
