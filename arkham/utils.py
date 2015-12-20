@@ -97,7 +97,7 @@ def init_logging():
     )
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
-    handler.setLevel(logging.INFO)
+    handler.setLevel(logging.DEBUG)
 
     logger = logging.getLogger('arkham')
     logger.setLevel(logging.DEBUG)

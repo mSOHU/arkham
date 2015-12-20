@@ -82,13 +82,24 @@ class BaseWorker(object):
 
 class GeventWorker(BaseWorker):
     pool = None
+    loop_threshold = 0.1
+
+    def loop_watcher(self):
+        while True:
+            start_time = time.time()
+            time.sleep(0.01)
+            loop_cost = time.time() - start_time
+
+            if loop_cost > self.loop_threshold:
+                self.logger.warning('Gevent loop time cost `%.2fms` > 100ms', loop_cost * 1000)
 
     def initialize(self):
         import gevent.monkey
         gevent.monkey.patch_all()
 
         import gevent.pool
-        self.pool = gevent.pool.Pool(self.consumer.prefetch_count)
+        self.pool = gevent.pool.Pool(self.consumer.prefetch_count + 1)
+        self.pool.spawn(self.loop_watcher)
 
     def spawn(self, method, properties, body):
         def _wrapper():
@@ -96,7 +107,7 @@ class GeventWorker(BaseWorker):
                 self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
 
         self.pool.spawn(_wrapper)
-        self.logger.debug('%r: pool size %s', self, len(self.pool))
+        self.logger.debug('%s: pool size %s', self.__class__.__name__, len(self.pool) - 1)
         self.pool.wait_available()
 
     def is_running(self):
@@ -202,7 +213,13 @@ class ArkhamConsumerRunner(object):
     def start(self):
         self.setup_consumer()
 
+        loop_counter = 0
         while not self.stop_flag:
+            loop_counter += 1
+
+            if loop_counter % 1000 == 0:
+                self.logger.debug('consumer loop counter #%u', loop_counter)
+
             # fetch message
             try:
                 with self.subscriber.ensure_service():
