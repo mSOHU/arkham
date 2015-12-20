@@ -9,7 +9,3 @@
 
 from .service import PublishService, SubscribeService, ArkhamService
 from .rpc import RPCService, service, default_server
-from .utils import init_logging
-
-
-init_logging()

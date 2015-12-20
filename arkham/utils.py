@@ -90,7 +90,17 @@ def handle_term(callback):
     signal.signal(signal.SIGINT, _handler)
 
 
+# ensure logger init only once
+_LOGGER_INIT = False
+
+
 def init_logging():
+    global _LOGGER_INIT
+    if _LOGGER_INIT:
+        return
+
+    _LOGGER_INIT = True
+
     formatter = logging.Formatter(
         '[%(levelname)1.1s %(asctime)s %(module)s:%(lineno)d] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
