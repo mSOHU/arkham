@@ -100,6 +100,9 @@ class GeventWorker(BaseWorker):
         import gevent.monkey
         gevent.monkey.patch_all()
 
+        import select
+        gevent.monkey.remove_item(select, 'poll')
+
         import gevent.pool
         self.pool = gevent.pool.Pool(self.consumer.prefetch_count)
 
@@ -232,7 +235,7 @@ class ArkhamConsumerRunner(object):
                         yielded = next(self.generator)
                     except StopIteration:
                         #  consumer cancel notification
-                        LOGGER.warning('Consumer been canceled. Trying to re-consume...')
+                        self.logger.warning('Consumer been canceled. Trying to re-consume...')
                         self.generator = self.subscriber.consume(
                             no_ack=self.consumer.no_ack,
                             inactivity_timeout=self.consumer.inactivity_timeout
@@ -240,7 +243,7 @@ class ArkhamConsumerRunner(object):
                         continue
             except ArkhamService.ConnectionReset:
                 if not self.stop_flag:
-                    LOGGER.error('Cannot connect to rabbit server, sleep 1 sec...')
+                    self.logger.error('Cannot connect to rabbit server, sleep 1 sec...')
                     time.sleep(1)
                 continue
 
