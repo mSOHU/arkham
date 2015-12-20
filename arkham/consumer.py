@@ -158,6 +158,8 @@ class ArkhamConsumerRunner(object):
         self.generator = []
 
         # early initialize worker so gevent can patch in time.
+        assert self.consumer.worker_class in WORKER_CLASSES, \
+            'unsupported worker class: `%s`' % self.consumer.worker_class
         worker_class = WORKER_CLASSES[self.consumer.worker_class]
         self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_class)
         self.worker = worker_class(self)
