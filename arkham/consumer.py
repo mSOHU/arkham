@@ -91,7 +91,10 @@ class GeventWorker(BaseWorker):
             loop_cost = time.time() - start_time
 
             if loop_cost > self.loop_threshold:
-                self.logger.warning('Gevent loop time cost `%.2fms` > 100ms', loop_cost * 1000)
+                self.logger.warning(
+                    'Gevent loop time cost `%.2fms` > 100ms, pool_size: %u',
+                    loop_cost * 1000, len(self.pool)
+                )
 
     def initialize(self):
         import gevent.monkey
