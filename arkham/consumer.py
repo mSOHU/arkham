@@ -199,6 +199,8 @@ class ArkhamConsumerRunner(object):
             for callback, args in self.callbacks.values():
                 apply_period_callback(ioloop, callback, args, self.logger)
 
+            assert self.consumer.prefetch_count <= 65535, \
+                '`prefetch_count`: %s is larger than limit(65535).' % self.consumer.prefetch_count
             self.subscriber.channel.basic_qos(prefetch_count=self.consumer.prefetch_count)
             self.generator = self.subscriber.consume(
                 no_ack=self.consumer.no_ack,
@@ -229,7 +231,7 @@ class ArkhamConsumerRunner(object):
             loop_counter += 1
 
             if loop_counter % 1000 == 0:
-                self.logger.debug('consumer loop counter #%u', loop_counter)
+                self.logger.debug('Consumer loop counter #%u', loop_counter)
 
             # fetch message
             try:
