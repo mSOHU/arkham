@@ -83,17 +83,18 @@ class BaseWorker(object):
 class GeventWorker(BaseWorker):
     pool = None
     loop_threshold = 0.1
+    sleep_interval = 0.01
 
     def loop_watcher(self):
         while True:
             start_time = time.time()
-            time.sleep(0.01)
-            loop_cost = time.time() - start_time
+            time.sleep(self.sleep_interval)
+            loop_cost = time.time() - start_time - self.sleep_interval
 
             if loop_cost > self.loop_threshold:
                 self.logger.warning(
-                    'Gevent loop time cost `%.2fms` > 100ms, pool_size: %u',
-                    loop_cost * 1000, len(self.pool)
+                    'Gevent loop time cost `%.2fms` > %sms, pool_size: %u',
+                    self.loop_threshold * 1000, loop_cost * 1000, len(self.pool)
                 )
 
     def initialize(self):
