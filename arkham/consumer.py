@@ -93,8 +93,8 @@ class GeventWorker(BaseWorker):
 
             if loop_cost > self.loop_threshold:
                 self.logger.warning(
-                    'Gevent loop time cost `%.2fms` > %sms, pool_size: %u',
-                    self.loop_threshold * 1000, loop_cost * 1000, len(self.pool)
+                    'Gevent loop time cost `%.2fms` > %sms, current pool_size: %u',
+                    loop_cost * 1000, self.loop_threshold * 1000, len(self.pool)
                 )
 
     def initialize(self):
@@ -123,6 +123,7 @@ class GeventWorker(BaseWorker):
         return bool(len(self.pool))
 
     def join(self):
+        self.logger.info('Joining worker pool, current pool_size: %s', len(self.pool))
         return self.pool.join()
 
 
@@ -159,7 +160,7 @@ class ArkhamConsumerRunner(object):
 
         # early initialize worker so gevent can patch in time.
         assert self.consumer.worker_class in WORKER_CLASSES, \
-            'unsupported worker class: `%s`' % self.consumer.worker_class
+            'Unsupported worker class: `%s`' % self.consumer.worker_class
         worker_class = WORKER_CLASSES[self.consumer.worker_class]
         self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_class)
         self.worker = worker_class(self)
@@ -336,7 +337,6 @@ class ArkhamConsumer(HealthyCheckerMixin):
 
     # int / float. if set, will call ArkhamConsumer.inactivate when timed-out
     inactivity_timeout = None
-    service_instances = {}
     logger = None
     log_level = 'WARNING'
     heartbeat_interval = None
@@ -345,6 +345,9 @@ class ArkhamConsumer(HealthyCheckerMixin):
     # 'sync' or 'gevent'
     # will spawn greenlet for consume, pool size will be `prefetch_count`
     worker_class = 'sync'
+
+    # service instance cache
+    service_instances = {}
 
     @classmethod
     def get_service(cls, service_name, force=False):

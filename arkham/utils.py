@@ -100,7 +100,7 @@ def init_logging():
     handler.setLevel(logging.DEBUG)
 
     logger = logging.getLogger('arkham')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     logger.propagate = False
     logger.addHandler(handler)
 
