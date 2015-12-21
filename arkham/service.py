@@ -23,7 +23,8 @@ import pika.exceptions
 from pika.adapters.blocking_connection import BlockingChannel
 
 from .utils import (
-    merge_service_config, gen_rand_string, SmartJsonEncoder, handle_closed
+    merge_service_config, gen_rand_string,
+    SmartJsonEncoder, handle_closed
 )
 
 
@@ -120,7 +121,7 @@ class ArkhamService(object):
     @contextlib.contextmanager
     def ensure_service(self):
         if not self.connection or self.connection.is_closed:
-            LOGGER.warning('ensure_service: Connection Closed, Reopening...')
+            LOGGER.info('ensure_service: Opening connection...')
             self.connection = self.make_connection(self.conf)
             self.channel = self.connection.channel()
             self.invoke_connect_callback()
@@ -128,7 +129,9 @@ class ArkhamService(object):
         try:
             yield
         except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as err:
-            LOGGER.exception('ensure_service: %s, due %r', type(err).__name__, err)
+            # user operation will not trigger connection close, so no stack trace
+            log_fn = LOGGER.exception if isinstance(err, pika.exceptions.ChannelClosed) else LOGGER.error
+            log_fn('ensure_service: %s, due %r', type(err).__name__, err)
             # FIXME: close connection if channel is closed,
             # but simpler for implements connect callbacks
             self.connection = self.channel = None
