@@ -139,13 +139,12 @@ class SyncWorker(BaseWorker):
         return
 
 
-WORKER_CLASSES = {
-    'gevent': GeventWorker,
-    'sync': SyncWorker,
-}
+class _ArkhamConsumerRunner(object):
+    WORKER_CLASSES = {
+        'gevent': GeventWorker,
+        'sync': SyncWorker,
+    }
 
-
-class ArkhamConsumerRunner(object):
     def __init__(self, consumer, config_path, consumer_name):
         self.consumer = consumer
         self.logger = self.consumer.logger = self.consumer.logger or LOGGER
@@ -159,9 +158,9 @@ class ArkhamConsumerRunner(object):
         self.generator = []
 
         # early initialize worker so gevent can patch in time.
-        assert self.consumer.worker_class in WORKER_CLASSES, \
+        assert self.consumer.worker_class in self.WORKER_CLASSES, \
             'Unsupported worker class: `%s`' % self.consumer.worker_class
-        worker_class = WORKER_CLASSES[self.consumer.worker_class]
+        worker_class = self.WORKER_CLASSES[self.consumer.worker_class]
         self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_class)
         self.worker = worker_class(self)
 
@@ -314,7 +313,7 @@ def consumer_entry():
     if not has_kwargs:
         ArkhamWarning.warn('consume function should have **kwargs.')
 
-    runner = ArkhamConsumerRunner(
+    runner = _ArkhamConsumerRunner(
         consumer,
         find_config(cmd_args.config_path, cmd_args.entry_point),
         cmd_args.consumer_name
