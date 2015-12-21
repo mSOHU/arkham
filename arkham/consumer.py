@@ -184,11 +184,7 @@ class ArkhamConsumerRunner(object):
             if not self.worker.is_running():
                 self.logger.warning('SIGTERM received. Exiting...')
                 ioloop = self.subscriber.connection._impl
-
-                def _close_fn():
-                    ioloop.close(reply_text='User requested exit due signal SIGTERM')
-
-                ioloop.add_timeout(0, _close_fn)
+                ioloop.add_timeout(0, self.subscriber.channel.cancel)
             else:
                 self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
             self.stop_flag = True
@@ -240,12 +236,13 @@ class ArkhamConsumerRunner(object):
                     try:
                         yielded = next(self.generator)
                     except StopIteration:
-                        #  consumer cancel notification
-                        self.logger.warning('Consumer been canceled. Trying to re-consume...')
-                        self.generator = self.subscriber.consume(
-                            no_ack=self.consumer.no_ack,
-                            inactivity_timeout=self.consumer.inactivity_timeout
-                        )
+                        if not self.stop_flag:
+                            #  consumer cancel notification
+                            self.logger.warning('Consumer been canceled. Trying to re-consume...')
+                            self.generator = self.subscriber.consume(
+                                no_ack=self.consumer.no_ack,
+                                inactivity_timeout=self.consumer.inactivity_timeout
+                            )
                         continue
             except ArkhamService.ConnectionReset:
                 if not self.stop_flag:
@@ -279,6 +276,7 @@ class ArkhamConsumerRunner(object):
 
         # before exit
         self.worker.join()
+        self.logger.info('Consumer exiting...')
 
 
 def period_callback(interval, startup_call=False, ignore_tick=False):
