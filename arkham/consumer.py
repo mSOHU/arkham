@@ -117,7 +117,6 @@ class GeventWorker(BaseWorker):
 
         self.pool.spawn(_wrapper)
         self.logger.debug('Gevent pool_size: %s', len(self.pool))
-        self.pool.wait_available()
 
     def is_running(self):
         return bool(len(self.pool))

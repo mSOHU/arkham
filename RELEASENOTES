@@ -1,0 +1,20 @@
+arkham release notes
+=======================
+
+--[ Arkham 0.6.1 ] Release date: 22 Dec 2015
+
+* [FIX] 更加graceful的退出方式，使用cancel consumer方式
+* [FIX] 取消了在创建新greenlet之后等待pool有空间的写法。
+        因为rabbitmq-server会保证我们unack的数量等同于gevent pool大小。
+
+
+--[ Arkham 0.6.0 ] Release date: 21 Dec 2015
+
+* [NEW] gevent worker，直接写你的同步代码，就直接变异步！
+* [NEW] requeue_on_exception / suppress_exceptions支持，如果出现异常，
+        会扔到dlx中，参考https://www.rabbitmq.com/dlx.html
+* [NEW] ArkhamConsumer.consume函数必须携带 **kwargs，不再后向兼容
+* [NEW] 完整支持SIGTERM和SIGINT，收到kill时会graceful退出
+* [NEW] prefetch_count: basic_qos预取支持，如果使用gevent worker，同时会指定gevent pool大小
+* [NEW] 自带gevent健康检查，如果循环时间过长，会有warning
+* [NEW] 支持Consumer Cancel Notification,  https://www.rabbitmq.com/consumer-cancel.html
