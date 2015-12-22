@@ -6,6 +6,7 @@ arkham release notes
 * [FIX] 更加graceful的退出方式，使用cancel consumer方式
 * [FIX] 取消了在创建新greenlet之后等待pool有空间的写法。
         因为rabbitmq-server会保证我们unack的数量等同于gevent pool大小。
+* [FIX] 如果worker.is_running(), 则不判定为inactivated
 
 
 --[ Arkham 0.6.0 ] Release date: 21 Dec 2015

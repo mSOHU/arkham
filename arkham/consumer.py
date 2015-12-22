@@ -250,7 +250,7 @@ class _ArkhamConsumerRunner(object):
 
             # inactivate notice
             if not yielded:
-                if self.inactivate_state:
+                if self.inactivate_state or self.worker.is_running():
                     continue
 
                 try:
