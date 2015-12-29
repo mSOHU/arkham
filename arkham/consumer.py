@@ -256,7 +256,7 @@ class _ArkhamConsumerRunner(object):
                 try:
                     self.consumer.inactivate()
                     # make sure inactivate handler will be called successfully
-                    inactivate_state = True
+                    self.inactivate_state = True
                 except Exception as err:
                     self.logger.exception('Exception occurs in inactivate handler: %r' % err)
 
