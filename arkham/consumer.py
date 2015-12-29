@@ -152,6 +152,7 @@ class _ArkhamConsumerRunner(object):
         # setup flags
         self.inactivate_state = False
         self.stop_flag = False
+        self.last_activity = time.time()
 
         # for IDE
         self.generator = []
@@ -214,6 +215,8 @@ class _ArkhamConsumerRunner(object):
             if not self.consumer.no_ack:
                 self.subscriber.reject(method.delivery_tag, requeue=self.consumer.requeue_on_exception)
             return
+        finally:
+            self.last_activity = time.time()
 
         if not self.consumer.no_ack:
             self.subscriber.acknowledge(method.delivery_tag)
@@ -251,6 +254,9 @@ class _ArkhamConsumerRunner(object):
             # inactivate notice
             if not yielded:
                 if self.inactivate_state or self.worker.is_running():
+                    continue
+
+                if time.time() - self.last_activity < self.consumer.inactivity_timeout:
                     continue
 
                 try:
