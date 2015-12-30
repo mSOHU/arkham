@@ -128,3 +128,16 @@ class SmartJsonEncoder(json.JSONEncoder):
             return o.strftime('%Y-%m-%d %H:%M:%S')
         else:
             return super(SmartJsonEncoder, self).default(o)
+
+
+def call_once(fn):
+    flag = [False]
+
+    def _wrapper(*args, **kwargs):
+        if flag[0]:
+            return
+
+        flag[0] = True
+        return fn(*args, **kwargs)
+
+    return _wrapper
