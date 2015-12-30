@@ -15,6 +15,7 @@ refactored reconnect logic
 
 import json
 import logging
+import threading
 import contextlib
 
 import yaml
@@ -91,6 +92,7 @@ class ArkhamService(object):
         self.name = name
         self.conf = conf
         self.connect_callbacks = []
+        self._connect_lock = threading.Lock()
         self.handle_declarations()
 
     def add_connect_callback(self, callback, initial=True):
@@ -120,11 +122,12 @@ class ArkhamService(object):
 
     @contextlib.contextmanager
     def ensure_service(self):
-        if not self.connection or self.connection.is_closed:
-            LOGGER.info('ensure_service: Opening connection...')
-            self.connection = self.make_connection(self.conf)
-            self.channel = self.connection.channel()
-            self.invoke_connect_callback()
+        with self._connect_lock:
+            if not self.connection or self.connection.is_closed:
+                LOGGER.info('ensure_service: Opening connection...')
+                self.connection = self.make_connection(self.conf)
+                self.channel = self.connection.channel()
+                self.invoke_connect_callback()
 
         try:
             yield
