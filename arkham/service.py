@@ -92,7 +92,7 @@ class ArkhamService(object):
         self.name = name
         self.conf = conf
         self.connect_callbacks = []
-        self._connect_lock = threading.Lock()
+        self._connect_lock = threading.RLock()
         self.handle_declarations()
 
     def add_connect_callback(self, callback, initial=True):
@@ -122,6 +122,7 @@ class ArkhamService(object):
 
     @contextlib.contextmanager
     def ensure_service(self):
+        # make connection progress thread-safe
         with self._connect_lock:
             if not self.connection or self.connection.is_closed:
                 LOGGER.info('ensure_service: Opening connection...')

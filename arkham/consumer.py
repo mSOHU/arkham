@@ -183,6 +183,9 @@ class _ArkhamConsumerRunner(object):
             if not self.worker.is_running():
                 self.logger.warning('SIGTERM received. Exiting...')
                 ioloop = self.subscriber.connection._impl
+
+                # blocking channel's cancel will call process_timeouts,
+                # and timeouts will be invoked again.
                 ioloop.add_timeout(0, call_once(self.subscriber.channel.cancel))
             else:
                 self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
