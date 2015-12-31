@@ -81,6 +81,8 @@ class BaseWorker(object):
 
 
 class GeventWorker(BaseWorker):
+    DEFAULT_POOL_SIZE = 20
+
     pool = None
     loop_threshold = 0.1
     sleep_interval = 0.01
@@ -105,7 +107,13 @@ class GeventWorker(BaseWorker):
         gevent.monkey.remove_item(select, 'poll')
 
         import gevent.pool
-        self.pool = gevent.pool.Pool(self.consumer.prefetch_count)
+        pool_size = self.consumer.prefetch_count
+        if pool_size is None:
+            ArkhamWarning.warn('worker_class set to `gevent` but prefetch_count is None, '
+                               'pool_size set to %s' % self.DEFAULT_POOL_SIZE)
+            pool_size = self.DEFAULT_POOL_SIZE
+
+        self.pool = gevent.pool.Pool(pool_size)
 
         import gevent
         gevent.spawn(self.loop_watcher).start()
@@ -198,9 +206,10 @@ class _ArkhamConsumerRunner(object):
             for callback, args in self.callbacks.values():
                 apply_period_callback(ioloop, callback, args, self.logger)
 
-            assert self.consumer.prefetch_count <= 65535, \
-                '`prefetch_count`: %s is larger than limit(65535).' % self.consumer.prefetch_count
-            self.subscriber.channel.basic_qos(prefetch_count=self.consumer.prefetch_count)
+            if self.consumer.prefetch_count is not None:
+                assert self.consumer.prefetch_count <= 65535, \
+                    '`prefetch_count`: %s is larger than limit(65535).' % self.consumer.prefetch_count
+                self.subscriber.channel.basic_qos(prefetch_count=self.consumer.prefetch_count)
             self.generator = self.subscriber.consume(
                 no_ack=self.consumer.no_ack,
                 inactivity_timeout=self.consumer.inactivity_timeout
@@ -345,7 +354,7 @@ class ArkhamConsumer(HealthyCheckerMixin):
     logger = None
     log_level = 'WARNING'
     heartbeat_interval = None
-    prefetch_count = 0
+    prefetch_count = None
 
     # 'sync' or 'gevent'
     # will spawn greenlet for consume, pool size will be `prefetch_count`
