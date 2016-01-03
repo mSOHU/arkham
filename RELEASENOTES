@@ -1,6 +1,27 @@
 arkham release notes
 =======================
 
+--[ Arkham 0.6.2 ] Release date: 4 Jan 2016
+
+* [FIX] 修复了cancel consumer无法在inactivity_timeout=None时退出的问题
+        此问题是由于pika在consumer loop中未将BasicCancelOk作为终止条件
+        暂时解决方案是对pika打了补丁
+* [FIX] 使用了打过补丁的pika master branch, 修复了pika中如果发生EINTR时
+        未捕获IOError的问题, 在pika 0.10.0中_SELECT_ERROR未包含IOError
+* [FIX] 由于在pika 0.10.1-dev0中未能重现gevent上下文中select.poll()导致
+        CPU满负荷运转的问题，取消了屏蔽select.poll()的代码
+* [FIX] 修复了prefetch_count=0(默认)情况下, gevent pool被初始化为size=0
+        的问题, 如果prefetch_count为None, 则pool大小会被设置为20,
+        且会产生一个ArkhamWarning
+* [FIX] 现在prefetch_count默认为None, 如果不为None则会调用basic_qos方法
+* [FIX] 添加了call_once工具方法，避免channel.cancel()方法被调用多次
+* [FIX] 使用threading.Lock结果ensure_service在gevent上下文中的竞态问题
+* [FIX] 修复了由一个笔误引起的inactivate notice重复出现
+* [FIX] 以最后一个message完成处理后的时间点记为inactivate, 现在
+        inactivate notice至少出现在最后一个消息处理完成之后的
+        inactivity_timeout秒之后
+
+
 --[ Arkham 0.6.1 ] Release date: 22 Dec 2015
 
 * [FIX] 更加graceful的退出方式，使用cancel consumer方式
