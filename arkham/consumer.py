@@ -103,8 +103,10 @@ class GeventWorker(BaseWorker):
         import gevent.monkey
         gevent.monkey.patch_all()
 
-        import select
-        gevent.monkey.remove_item(select, 'poll')
+        # using select.poll in gevent context may cause 100% cpu usage,
+        # but not reproduced in pika 0.10.1-dev0
+        # import select
+        # gevent.monkey.remove_item(select, 'poll')
 
         import gevent.pool
         pool_size = self.consumer.prefetch_count
