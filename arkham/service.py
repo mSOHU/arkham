@@ -93,7 +93,10 @@ class ArkhamService(object):
         self.conf = conf
         self.connect_callbacks = []
         self._connect_lock = threading.Lock()
-        self.handle_declarations()
+
+        if self.conf.get('declare'):
+            with self.ensure_service():
+                self.handle_declarations()
 
     def add_connect_callback(self, callback, initial=True):
         """
@@ -102,7 +105,8 @@ class ArkhamService(object):
         """
         self.connect_callbacks.append(callback)
         if initial:
-            callback()
+            with self.ensure_service():
+                callback()
 
     def invoke_connect_callback(self):
         for callback in self.connect_callbacks:
@@ -229,7 +233,6 @@ class PublishService(ArkhamService):
 class SubscribeService(ArkhamService):
     service_role = 'subscribe'
 
-    @handle_closed
     def handle_declarations(self):
         super(SubscribeService, self).handle_declarations()
 

@@ -107,6 +107,7 @@ def init_logging():
 
 def handle_closed(fn):
     """handle closed connection / channel only once
+    *ONLY* for end-user functions
     """
     @functools.wraps(fn)
     def _wrapper(self, *args, **kwargs):
