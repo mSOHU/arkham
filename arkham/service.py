@@ -92,7 +92,9 @@ class ArkhamService(object):
         self.name = name
         self.conf = conf
         self.connect_callbacks = []
-        self._connect_lock = threading.Lock()
+
+        # delayed initialization
+        self._connect_lock = None
 
         if self.conf.get('declare'):
             with self.ensure_service():
@@ -126,6 +128,9 @@ class ArkhamService(object):
 
     @contextlib.contextmanager
     def ensure_service(self):
+        if self._connect_lock is None:
+            self._connect_lock = threading.Lock()
+
         # make connection progress thread-safe
         reconnected = False
         with self._connect_lock:
