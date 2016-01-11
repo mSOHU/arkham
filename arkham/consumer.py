@@ -155,6 +155,9 @@ class _ArkhamConsumerRunner(object):
     }
     MAX_SLEEP_TIME = 15
 
+    # we use this to jump out consume() loop
+    MIN_INACTIVITY_TIMEOUT = 0.5
+
     def __init__(self, consumer, config_path, consumer_name):
         self.consumer = consumer
         self.logger = self.consumer.logger = self.consumer.logger or LOGGER
@@ -165,6 +168,7 @@ class _ArkhamConsumerRunner(object):
         self.stop_flag = False
         self.last_slept = 0
         self.last_activity = time.time()
+        self.inactivity_timeout = self.consumer.inactivity_timeout or self.MIN_INACTIVITY_TIMEOUT
 
         # for IDE
         self.generator = []
@@ -192,16 +196,11 @@ class _ArkhamConsumerRunner(object):
 
     def setup_signal_handler(self):
         def _term_handler():
+            self.stop_flag = True
             if not self.worker.is_running():
                 self.logger.warning('SIGTERM received. Exiting...')
-                conn = self.subscriber.connection
-
-                # blocking channel's cancel will call process_timeouts,
-                # and timeouts will be invoked again.
-                conn.add_timeout(0, call_once(self.subscriber.channel.cancel))
             else:
                 self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
-            self.stop_flag = True
         handle_term(_term_handler)
 
     def setup_consumer(self):
@@ -216,7 +215,7 @@ class _ArkhamConsumerRunner(object):
                 self.subscriber.channel.basic_qos(prefetch_count=self.consumer.prefetch_count)
             self.generator = self.subscriber.consume(
                 no_ack=self.consumer.no_ack,
-                inactivity_timeout=self.consumer.inactivity_timeout
+                inactivity_timeout=self.inactivity_timeout
             )
         self.subscriber.add_connect_callback(_on_connect)
 
@@ -258,7 +257,7 @@ class _ArkhamConsumerRunner(object):
                             self.logger.warning('Consumer been canceled. Trying to re-consume...')
                             self.generator = self.subscriber.consume(
                                 no_ack=self.consumer.no_ack,
-                                inactivity_timeout=self.consumer.inactivity_timeout
+                                inactivity_timeout=self.inactivity_timeout
                             )
                         continue
                     else:
@@ -274,6 +273,10 @@ class _ArkhamConsumerRunner(object):
             # inactivate notice
             if not yielded:
                 if self.inactivate_state or self.worker.is_running():
+                    continue
+
+                if self.consumer.inactivity_timeout is None:
+                    # this means we should check the stop_flag
                     continue
 
                 if time.time() - self.last_activity < self.consumer.inactivity_timeout:
@@ -299,8 +302,11 @@ class _ArkhamConsumerRunner(object):
             self.worker.spawn(method, properties, body)
 
         # before exit
-        self.worker.join()
-        self.logger.info('Consumer exiting...')
+        try:
+            self.subscriber.channel.cancel()
+        finally:
+            self.worker.join()
+            self.logger.info('Consumer exiting...')
 
 
 def period_callback(interval, startup_call=False, ignore_tick=False):
