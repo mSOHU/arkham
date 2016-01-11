@@ -15,7 +15,7 @@ import contextlib
 
 from arkham.service import ArkhamService
 from arkham.healthy import HealthyCheckerMixin, HealthyChecker
-from arkham.utils import load_entry_point, ArkhamWarning, find_config, handle_term, call_once
+from arkham.utils import load_entry_point, ArkhamWarning, find_config, handle_term
 
 
 LOGGER = logging.getLogger(__name__)
@@ -200,7 +200,9 @@ class _ArkhamConsumerRunner(object):
             if not self.worker.is_running():
                 self.logger.warning('SIGTERM received. Exiting...')
             else:
-                self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
+                self.logger.warning(
+                    'SIGTERM received while processing a message, '
+                    'consumer exit is scheduled.')
         handle_term(_term_handler)
 
     def setup_consumer(self):

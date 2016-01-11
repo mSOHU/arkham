@@ -19,7 +19,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'pyyaml',
-        'pika==0.10.1-dev0',
+        'pika==0.10.1-dev1',
         'gevent==1.1rc1',
     ],
     entry_points={
