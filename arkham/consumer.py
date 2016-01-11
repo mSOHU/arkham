@@ -153,6 +153,7 @@ class _ArkhamConsumerRunner(object):
         'gevent': GeventWorker,
         'sync': SyncWorker,
     }
+    MAX_SLEEP_TIME = 15
 
     def __init__(self, consumer, config_path, consumer_name):
         self.consumer = consumer
@@ -162,6 +163,7 @@ class _ArkhamConsumerRunner(object):
         # setup flags
         self.inactivate_state = False
         self.stop_flag = False
+        self.last_slept = 0
         self.last_activity = time.time()
 
         # for IDE
@@ -259,10 +261,14 @@ class _ArkhamConsumerRunner(object):
                                 inactivity_timeout=self.consumer.inactivity_timeout
                             )
                         continue
+                    else:
+                        # reset sleep time
+                        self.last_slept = 0
             except ArkhamService.ConnectionReset:
                 if not self.stop_flag:
-                    self.logger.error('Cannot connect to rabbit server, sleep 1 sec...')
-                    time.sleep(1)
+                    self.logger.error('Cannot reach rabbit server, sleep 1 sec...')
+                    self.last_slept = min(self.MAX_SLEEP_TIME, self.last_slept * 2)
+                    time.sleep(self.last_slept)
                 continue
 
             # inactivate notice
