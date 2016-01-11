@@ -36,7 +36,7 @@ def collect_period_callbacks(consumer):
     return callbacks
 
 
-def apply_period_callback(ioloop, callback, args, logger):
+def apply_period_callback(connection, callback, args, logger):
     def _wrapper():
         try:
             callback()
@@ -53,11 +53,11 @@ def apply_period_callback(ioloop, callback, args, logger):
             timeout = max(next_schedule, 0)
 
         last_schedule[0] = now_time + timeout
-        ioloop.add_timeout(timeout, _wrapper)
+        connection.add_timeout(timeout, _wrapper)
 
     _start_timeout = 0 if args['startup_call'] else args['interval']
     last_schedule = [time.time() + _start_timeout]
-    ioloop.add_timeout(_start_timeout, _wrapper)
+    connection.add_timeout(_start_timeout, _wrapper)
 
 
 class BaseWorker(object):
@@ -192,11 +192,11 @@ class _ArkhamConsumerRunner(object):
         def _term_handler():
             if not self.worker.is_running():
                 self.logger.warning('SIGTERM received. Exiting...')
-                ioloop = self.subscriber.connection._impl
+                conn = self.subscriber.connection
 
                 # blocking channel's cancel will call process_timeouts,
                 # and timeouts will be invoked again.
-                ioloop.add_timeout(0, call_once(self.subscriber.channel.cancel))
+                conn.add_timeout(0, call_once(self.subscriber.channel.cancel))
             else:
                 self.logger.warning('SIGTERM received while processing a message, consumer exit is scheduled.')
             self.stop_flag = True
@@ -204,9 +204,9 @@ class _ArkhamConsumerRunner(object):
 
     def setup_consumer(self):
         def _on_connect():
-            ioloop = self.subscriber.connection._impl
+            conn = self.subscriber.connection
             for callback, args in self.callbacks.values():
-                apply_period_callback(ioloop, callback, args, self.logger)
+                apply_period_callback(conn, callback, args, self.logger)
 
             if self.consumer.prefetch_count is not None:
                 assert self.consumer.prefetch_count <= 65535, \
