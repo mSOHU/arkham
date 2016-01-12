@@ -1,6 +1,16 @@
 arkham release notes
 =======================
 
+--[ Arkham 0.6.3 ] Release date: 12 Jan 2016
+
+* [FIX] 修复了threading.Lock可能会在money.patch_all()之前初始化导致的死锁
+* [FIX] 修正了handle_closed几处不正确的使用方式
+* [FIX] 滚回使用select.select而不是使用select.poll
+* [FIX] 重写了退出逻辑, 恢复至pika未补丁版
+* [FIX] 使用正确的BlockingConnection.add_timeout函数
+* [NEW] 使用退避算法重试连接服务器
+
+
 --[ Arkham 0.6.2 ] Release date: 4 Jan 2016
 
 * [FIX] 修复了cancel consumer无法在inactivity_timeout=None时退出的问题
