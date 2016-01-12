@@ -155,7 +155,7 @@ class _ArkhamConsumerRunner(object):
     MAX_SLEEP_TIME = 15
 
     # we use this to jump out consume() loop
-    MIN_INACTIVITY_TIMEOUT = 0.5
+    INACTIVITY_TIMEOUT = 0.5
 
     def __init__(self, consumer, config_path, consumer_name):
         self.consumer = consumer
@@ -167,7 +167,6 @@ class _ArkhamConsumerRunner(object):
         self.stop_flag = False
         self.last_slept = 0
         self.last_activity = time.time()
-        self.inactivity_timeout = self.consumer.inactivity_timeout or self.MIN_INACTIVITY_TIMEOUT
 
         # for IDE
         self.generator = []
@@ -216,7 +215,7 @@ class _ArkhamConsumerRunner(object):
                 self.subscriber.channel.basic_qos(prefetch_count=self.consumer.prefetch_count)
             self.generator = self.subscriber.consume(
                 no_ack=self.consumer.no_ack,
-                inactivity_timeout=self.inactivity_timeout
+                inactivity_timeout=self.INACTIVITY_TIMEOUT
             )
         self.subscriber.add_connect_callback(_on_connect)
 
@@ -258,7 +257,7 @@ class _ArkhamConsumerRunner(object):
                             self.logger.warning('Consumer been canceled. Trying to re-consume...')
                             self.generator = self.subscriber.consume(
                                 no_ack=self.consumer.no_ack,
-                                inactivity_timeout=self.inactivity_timeout
+                                inactivity_timeout=self.INACTIVITY_TIMEOUT
                             )
                         continue
                     else:
@@ -266,8 +265,8 @@ class _ArkhamConsumerRunner(object):
                         self.last_slept = 0
             except ArkhamService.ConnectionReset:
                 if not self.stop_flag:
-                    self.logger.error('Cannot reach rabbit server, sleep 1 sec...')
                     self.last_slept = min(self.MAX_SLEEP_TIME, self.last_slept * 2)
+                    self.logger.error('Cannot reach rabbit server, sleep %s second.', self.last_slept)
                     time.sleep(self.last_slept)
                 continue
 

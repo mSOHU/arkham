@@ -106,7 +106,7 @@ class ArkhamService(object):
         TODO: maybe event
         """
         self.connect_callbacks.append(callback)
-        if initial:
+        if initial and self.connection and not self.connection.is_closed:
             with self.ensure_service():
                 callback()
 
