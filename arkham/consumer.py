@@ -182,7 +182,8 @@ class _ArkhamConsumerRunner(object):
         self.subscriber = ArkhamService.get_instance(consumer_name)
 
         self.setup_signal_handler()
-        self.setup_healthy_checker()
+        if self.consumer.enable_healthy_checker:
+            self.setup_healthy_checker()
 
         self.callbacks = collect_period_callbacks(self.consumer)
 
