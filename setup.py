@@ -20,7 +20,7 @@ setup(
     install_requires=[
         'pyyaml',
         'pika==0.10.1-dev1',
-        'gevent==1.1rc1',
+        'gevent==1.1.0',
     ],
     entry_points={
         'console_scripts': [
