@@ -22,6 +22,7 @@ LOGGER = logging.getLogger(__name__)
 
 class HealthyCheckerMixin(object):
     logger = None
+    enable_healthy_checker = False
 
     @classmethod
     def health_check(cls):
