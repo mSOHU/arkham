@@ -10,12 +10,11 @@ import json
 import time
 import inspect
 import logging
-import argparse
 import contextlib
 
 from arkham.service import ArkhamService
 from arkham.healthy import HealthyCheckerMixin, HealthyChecker
-from arkham.utils import load_entry_point, ArkhamWarning, find_config, handle_term
+from arkham.utils import handle_term
 
 
 LOGGER = logging.getLogger(__name__)
@@ -60,104 +59,13 @@ def apply_period_callback(connection, callback, args, logger):
     connection.add_timeout(_start_timeout, _wrapper)
 
 
-class BaseWorker(object):
-    def __init__(self, runner):
-        self.runner = runner
-        self.consumer = runner.consumer
-        self.logger = runner.consumer.logger
-        self.initialize()
-
-    def initialize(self):
-        pass
-
-    def spawn(self, method, properties, body):
-        raise NotImplementedError()
-
-    def is_running(self):
-        raise NotImplementedError()
-
-    def join(self):
-        raise NotImplementedError()
-
-
-class GeventWorker(BaseWorker):
-    DEFAULT_POOL_SIZE = 20
-
-    pool = None
-    loop_threshold = 0.1
-    sleep_interval = 0.01
-
-    def loop_watcher(self):
-        while True:
-            start_time = time.time()
-            time.sleep(self.sleep_interval)
-            loop_cost = time.time() - start_time - self.sleep_interval
-
-            if loop_cost > self.loop_threshold:
-                self.logger.warning(
-                    'Gevent loop time cost `%.2fms` > %sms, current pool_size: %u',
-                    loop_cost * 1000, self.loop_threshold * 1000, len(self.pool)
-                )
-
-    def initialize(self):
-        import gevent.monkey
-        gevent.monkey.patch_all()
-
-        # using select.poll in gevent context may cause 100% cpu usage
-        import select
-        gevent.monkey.remove_item(select, 'poll')
-
-        import gevent.pool
-        pool_size = self.consumer.prefetch_count
-        if pool_size is None:
-            ArkhamWarning.warn('worker_class set to `gevent` but prefetch_count is None, '
-                               'pool_size set to %s' % self.DEFAULT_POOL_SIZE)
-            pool_size = self.DEFAULT_POOL_SIZE
-
-        self.pool = gevent.pool.Pool(pool_size)
-
-        import gevent
-        gevent.spawn(self.loop_watcher).start()
-
-    def spawn(self, method, properties, body):
-        def _wrapper():
-            with self.runner.work_context(method):
-                self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
-
-        self.pool.spawn(_wrapper)
-        self.logger.debug('Gevent pool_size: %s', len(self.pool))
-
-    def is_running(self):
-        return bool(len(self.pool))
-
-    def join(self):
-        self.logger.info('Joining worker pool, current pool_size: %s', len(self.pool))
-        return self.pool.join()
-
-
-class SyncWorker(BaseWorker):
-    def spawn(self, method, properties, body):
-        with self.runner.work_context(method):
-            self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
-
-    def is_running(self):
-        return False
-
-    def join(self):
-        return
-
-
-class _ArkhamConsumerRunner(object):
-    WORKER_CLASSES = {
-        'gevent': GeventWorker,
-        'sync': SyncWorker,
-    }
+class ArkhamConsumerRunner(object):
     MAX_SLEEP_TIME = 15
 
     # we use this to jump out consume() loop
     INACTIVITY_TIMEOUT = 0.5
 
-    def __init__(self, consumer, config_path, consumer_name):
+    def __init__(self, worker_cls, consumer, config_path, consumer_name):
         self.consumer = consumer
         self.logger = self.consumer.logger = self.consumer.logger or LOGGER
         self.logger.setLevel(getattr(logging, self.consumer.log_level))
@@ -171,12 +79,8 @@ class _ArkhamConsumerRunner(object):
         # for IDE
         self.generator = []
 
-        # early initialize worker so gevent can patch in time.
-        assert self.consumer.worker_class in self.WORKER_CLASSES, \
-            'Unsupported worker class: `%s`' % self.consumer.worker_class
-        worker_class = self.WORKER_CLASSES[self.consumer.worker_class]
-        self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_class)
-        self.worker = worker_class(self)
+        self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_cls)
+        self.worker = worker_cls(self)
 
         ArkhamService.init_config(config_path)
         self.subscriber = ArkhamService.get_instance(consumer_name)
@@ -325,32 +229,6 @@ def period_callback(interval, startup_call=False, ignore_tick=False):
         }
         return fn
     return _decorator
-
-
-def parse_arguments():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(dest='consumer_name', help='name of consumer service')
-    parser.add_argument('-c', '--config', dest='config_path', required=True, help='full path of config.yaml')
-    parser.add_argument('-e', '--entry', dest='entry_point', required=True, help='full entry class path')
-    return parser.parse_args()
-
-
-def consumer_entry():
-    cmd_args = parse_arguments()
-    consumer = load_entry_point(cmd_args.entry_point)
-
-    assert inspect.isclass(consumer), 'consumer must be a class'
-    assert issubclass(consumer, ArkhamConsumer), 'consumer class must be subclass of ArkhamConsumer'
-    has_kwargs = bool(inspect.getargspec(consumer.consume.im_func).keywords)
-    if not has_kwargs:
-        ArkhamWarning.warn('consume function should have **kwargs.')
-
-    runner = _ArkhamConsumerRunner(
-        consumer,
-        find_config(cmd_args.config_path, cmd_args.entry_point),
-        cmd_args.consumer_name
-    )
-    runner.start()
 
 
 class ArkhamConsumer(HealthyCheckerMixin):

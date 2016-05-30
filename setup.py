@@ -1,12 +1,25 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import re
 from setuptools import setup, find_packages
 
 
 description = """
 Elizabeth Arkham Asylum for the Criminally Insane
 """
+
+# Get the version
+version_regex = r'__version__ = ["\']([^"\']*)["\']'
+with open('arkham/__init__.py', 'r') as f:
+    text = f.read()
+    match = re.search(version_regex, text)
+
+    if match:
+        version = match.group(1)
+    else:
+        raise RuntimeError("No version number found!")
+
 
 setup(
     name='arkham',
@@ -24,8 +37,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'arc=arkham.consumer:consumer_entry',
-            'ark-consumer=arkham.consumer:consumer_entry',
+            'arc=arkham.consumer.entry:consumer_entry',
+            'ark-consumer=arkham.consumer.entry:consumer_entry',
             'ark-rpc=arkham.rpc:rpc_entry',
         ]
     },
