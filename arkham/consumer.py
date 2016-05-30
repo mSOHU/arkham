@@ -371,10 +371,6 @@ class ArkhamConsumer(HealthyCheckerMixin):
     heartbeat_interval = None
     prefetch_count = None
 
-    # 'sync' or 'gevent'
-    # will spawn greenlet for consume, pool size will be `prefetch_count`
-    worker_class = 'sync'
-
     # service instance cache
     service_instances = {}
 
