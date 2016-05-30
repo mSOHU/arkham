@@ -23,7 +23,7 @@ with open('arkham/__init__.py', 'r') as f:
 
 setup(
     name='arkham',
-    version='___version___',
+    version=version,
     description=description,
     long_description=description,
     author='the S.H.I.E.L.D TEAM',
