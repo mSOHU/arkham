@@ -79,7 +79,7 @@ class ArkhamConsumerRunner(object):
         # for IDE
         self.generator = []
 
-        self.logger.info('Using %s worker: %r', self.consumer.worker_class, worker_cls)
+        self.logger.info('Using %s: %r', worker_cls.__name__, worker_cls)
         self.worker = worker_cls(self)
 
         ArkhamService.init_config(config_path)
