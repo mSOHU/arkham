@@ -14,6 +14,8 @@ refactored reconnect logic
 
 
 import json
+import time
+import urllib
 import logging
 import threading
 import contextlib
@@ -33,6 +35,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ArkhamService(object):
+    MAX_CONNECTION_BACKOFF = 10
+    CONNECTION_BACKOFF_STEP = 2
+
     REGISTRY = None
     CONFIG = {}
     CONNECTIONS = {}
@@ -92,6 +97,10 @@ class ArkhamService(object):
         self.name = name
         self.conf = conf
         self.connect_callbacks = []
+        self.connection_failed = False
+        self.connection_backoff = 0
+        # this prevents instant disconnect after connection established
+        self.next_connect_time = 0
 
         # delayed initialization
         self._connect_lock = None
@@ -99,6 +108,8 @@ class ArkhamService(object):
         if self.conf.get('declare'):
             with self.ensure_service():
                 self.handle_declarations()
+
+        self.check_config()
 
     def add_connect_callback(self, callback, initial=True):
         """
@@ -135,10 +146,45 @@ class ArkhamService(object):
         reconnected = False
         with self._connect_lock:
             if not self.connection or self.connection.is_closed:
-                reconnected = True
-                LOGGER.info('ensure_service: Opening connection...')
-                self.connection = self.make_connection(self.conf)
-                self.channel = self.connection.channel()
+                server_url = '[%(name)s] rabbitmq+%(role)s://%(host)s:%(port)s/%(vhost)s' % {
+                    'host': self.conf.get('host', '127.0.0.1'),
+                    'port': self.conf.get('port', 5672),
+                    'vhost': urllib.quote(self.conf.get('vhost', '/'), safe=''),
+                    'role': self.service_role,
+                    'name': self.name,
+                }
+
+                # schedule back-off
+                now_time = time.time()
+                self.next_connect_time = max(
+                    self.next_connect_time,
+                    now_time + self.connection_backoff)
+
+                self.connection_backoff = min(
+                    self.connection_backoff + self.CONNECTION_BACKOFF_STEP,
+                    self.MAX_CONNECTION_BACKOFF)
+
+                sleep_time = self.next_connect_time - now_time
+                method_str = 'Retrying to' if self.connection_failed else 'Connecting to'
+                if sleep_time > 0:
+                    LOGGER.info(
+                        '%s %s in %.2fs...', method_str, server_url, sleep_time)
+                    time.sleep(sleep_time)
+                else:
+                    LOGGER.info('%s %s...', method_str, server_url)
+
+                try:
+                    self.connection = self.make_connection(self.conf)
+                    self.channel = self.connection.channel()
+                except Exception as err:
+                    LOGGER.exception('Unable to connect %s: %r', server_url, err)
+                    self.connection_failed = True
+                    raise self.ConnectionReset()
+                else:
+                    self.next_connect_time += self.connection_backoff
+                    self.connection_backoff = 0
+                    self.connection_failed = False
+                    reconnected = True
 
         if reconnected:
             self.invoke_connect_callback()
@@ -148,10 +194,13 @@ class ArkhamService(object):
         except (pika.exceptions.ChannelClosed, pika.exceptions.ConnectionClosed) as err:
             # user operation will not trigger connection close, so no stack trace
             log_fn = LOGGER.exception if isinstance(err, pika.exceptions.ChannelClosed) else LOGGER.error
-            log_fn('ensure_service: %s, due %r', type(err).__name__, err)
-            # FIXME: close connection if channel is closed,
-            # but simpler for implements connect callbacks
-            self.connection = self.channel = None
+            log_fn('Closing connection, due %s: %r', type(err).__name__, err)
+            try:
+                self.connection.close()
+            except pika.exceptions.ConnectionClosed:
+                pass
+            finally:
+                self.connection = self.channel = None
             raise self.ConnectionReset()
 
     def handle_declarations(self):
@@ -185,9 +234,15 @@ class ArkhamService(object):
             for bind in binds:
                 self.channel.queue_bind(**bind)
 
+    def check_config(self):
+        pass
+
 
 class PublishService(ArkhamService):
     service_role = 'publish'
+
+    def check_config(self):
+        assert 'exchange' in self.conf, 'Missing `exchange` in configuration.'
 
     @handle_closed
     def publish(self, body, mandatory=False, immediate=False, routing_key=None, **kwargs):
@@ -227,9 +282,13 @@ class PublishService(ArkhamService):
         else:
             properties = None
 
+        routing_key = routing_key or self.conf.get('routing_key')
+        if routing_key is None:
+            raise ValueError('No `routing_key` provided.')
+
         return self.channel.basic_publish(
             exchange=self.conf['exchange'],
-            routing_key=routing_key or self.conf['routing_key'],
+            routing_key=routing_key,
             body=body, properties=properties,
             mandatory=mandatory, immediate=immediate,
         )
@@ -237,6 +296,9 @@ class PublishService(ArkhamService):
 
 class SubscribeService(ArkhamService):
     service_role = 'subscribe'
+
+    def check_config(self):
+        assert self.conf.get('queue_name'), 'Missing `queue_name` in configuration'
 
     def handle_declarations(self):
         super(SubscribeService, self).handle_declarations()
