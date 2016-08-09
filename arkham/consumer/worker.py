@@ -6,6 +6,7 @@
 @date: 5/25/2016 8:51 PM
 """
 
+import json
 import time
 import logging
 
@@ -83,7 +84,18 @@ class GeventWorker(BaseWorker):
     def spawn(self, method, properties, body):
         def _wrapper():
             with self.runner.work_context(method):
-                self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
+                _body = body
+                if properties.content_type == 'application/json' and isinstance(body, str):
+                    try:
+                        _body = json.loads(body, encoding='utf8')
+                    except Exception as err:
+                        self.runner.logger.error(
+                            '%r while trying to decode message as json: %r',
+                            err, body[100:]
+                        )
+                        raise
+
+                self.consumer.consume(_body, headers=properties.headers or {}, properties=properties, method=method)
 
         self.pool.spawn(_wrapper)
         self.logger.debug('Gevent pool_size: %s', len(self.pool))
@@ -99,6 +111,16 @@ class GeventWorker(BaseWorker):
 class SyncWorker(BaseWorker):
     def spawn(self, method, properties, body):
         with self.runner.work_context(method):
+            if properties.content_type == 'application/json' and isinstance(body, str):
+                try:
+                    body = json.loads(body, encoding='utf8')
+                except Exception as err:
+                    self.runner.logger.error(
+                        '%r while trying to decode message as json: %r',
+                        err, body[100:]
+                    )
+                    raise
+
             self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
 
     def is_running(self):

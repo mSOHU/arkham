@@ -6,7 +6,6 @@
 @date: 10/27/2015 8:19 PM
 """
 
-import json
 import time
 import inspect
 import logging
@@ -201,9 +200,6 @@ class ArkhamConsumerRunner(object):
 
             # and spawn worker
             method, properties, body = yielded
-            if properties.content_type == 'application/json' and isinstance(body, str):
-                body = json.loads(body, encoding='utf8')
-
             self.worker.spawn(method, properties, body)
 
         # before exit
