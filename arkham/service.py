@@ -100,6 +100,8 @@ class ArkhamService(object):
             with self.ensure_service():
                 self.handle_declarations()
 
+        self.check_config()
+
     def add_connect_callback(self, callback, initial=True):
         """
         :param initial: should callback called first time
@@ -185,9 +187,15 @@ class ArkhamService(object):
             for bind in binds:
                 self.channel.queue_bind(**bind)
 
+    def check_config(self):
+        pass
+
 
 class PublishService(ArkhamService):
     service_role = 'publish'
+
+    def check_config(self):
+        assert 'exchange' in self.conf, 'Missing `exchange` in configuration.'
 
     @handle_closed
     def publish(self, body, mandatory=False, immediate=False, routing_key=None, **kwargs):
@@ -227,9 +235,13 @@ class PublishService(ArkhamService):
         else:
             properties = None
 
+        routing_key = routing_key or self.conf.get('routing_key')
+        if routing_key is None:
+            raise ValueError('No `routing_key` provided.')
+
         return self.channel.basic_publish(
             exchange=self.conf['exchange'],
-            routing_key=routing_key or self.conf['routing_key'],
+            routing_key=routing_key,
             body=body, properties=properties,
             mandatory=mandatory, immediate=immediate,
         )
@@ -237,6 +249,9 @@ class PublishService(ArkhamService):
 
 class SubscribeService(ArkhamService):
     service_role = 'subscribe'
+
+    def check_config(self):
+        assert self.conf.get('queue_name'), 'Missing `queue_name` in configuration'
 
     def handle_declarations(self):
         super(SubscribeService, self).handle_declarations()
