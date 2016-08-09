@@ -1,6 +1,14 @@
 arkham release notes
 =======================
 
+--[ Arkham 0.6.4 ] Release date: 30 May 2016
+
+* [FIX] 更早地初始化gevent，防止monkey.patch_all()不能覆盖代码
+* [CHG] 项目版本写入arkham/__init__.py
+* [CHG] 默认不开启健康检查模块
+* [NEW] 更新使用gevent==1.1.0
+
+
 --[ Arkham 0.6.3 ] Release date: 12 Jan 2016
 
 * [FIX] 修复了threading.Lock可能会在money.patch_all()之前初始化导致的死锁
