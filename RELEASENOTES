@@ -1,6 +1,16 @@
 arkham release notes
 =======================
 
+--[ Arkham 0.6.5 ] Release date: 09 Aug 2016
+
+* [FIX] 捕获json.loads异常，防止导致arkham崩溃
+* [FIX] 捕获连接异常，正确抛出ConnectionReset异常
+* [FIX] 添加了一些配置文件中的错误检查
+* [FIX] 一些PEP8修正
+* [NEW] 实现了连接退避算法，避免过快重连
+* [NEW] 优化创建连接时的提示
+
+
 --[ Arkham 0.6.4 ] Release date: 30 May 2016
 
 * [FIX] 更早地初始化gevent，防止monkey.patch_all()不能覆盖代码
