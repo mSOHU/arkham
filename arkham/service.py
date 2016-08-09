@@ -146,10 +146,12 @@ class ArkhamService(object):
         reconnected = False
         with self._connect_lock:
             if not self.connection or self.connection.is_closed:
-                server_url = 'rabbitmq://%(host)s:%(port)s/%(vhost)s' % {
+                server_url = '[%(name)s] rabbitmq+%(role)s://%(host)s:%(port)s/%(vhost)s' % {
                     'host': self.conf.get('host', '127.0.0.1'),
                     'port': self.conf.get('port', 5672),
-                    'vhost': urllib.quote(self.conf.get('vhost', '/')),
+                    'vhost': urllib.quote(self.conf.get('vhost', '/'), safe=''),
+                    'role': self.service_role,
+                    'name': self.name,
                 }
 
                 # schedule back-off
@@ -163,7 +165,7 @@ class ArkhamService(object):
                     self.MAX_CONNECTION_BACKOFF)
 
                 sleep_time = self.next_connect_time - now_time
-                method_str = 'Retrying' if self.connection_failed else 'Opening'
+                method_str = 'Retrying to' if self.connection_failed else 'Connecting to'
                 if sleep_time > 0:
                     LOGGER.info(
                         '%s %s in %.2fs...', method_str, server_url, sleep_time)
