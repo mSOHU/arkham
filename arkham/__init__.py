@@ -8,9 +8,10 @@
 
 __version__ = '0.6.4'
 
-from .service import PublishService, SubscribeService, ArkhamService
-from .rpc import RPCService, service, default_server
-from .utils import init_logging
+from arkham.service import PublishService, SubscribeService, ArkhamService
+from arkham.consumer.consumer import ArkhamConsumer
+from arkham.rpc import RPCService, service, default_server
+from arkham.utils import init_logging
 
 
 init_logging()
