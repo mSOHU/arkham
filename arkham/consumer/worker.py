@@ -91,7 +91,7 @@ class GeventWorker(BaseWorker):
                     except Exception as err:
                         self.runner.logger.error(
                             '%r while trying to decode message as json: %r',
-                            err, body[100:]
+                            err, body[:100]
                         )
                         raise
 
@@ -117,7 +117,7 @@ class SyncWorker(BaseWorker):
                 except Exception as err:
                     self.runner.logger.error(
                         '%r while trying to decode message as json: %r',
-                        err, body[100:]
+                        err, body[:100]
                     )
                     raise
 
