@@ -95,7 +95,9 @@ class GeventWorker(BaseWorker):
                         )
                         raise
 
-                self.consumer.consume(_body, headers=properties.headers or {}, properties=properties, method=method)
+                self.consumer.consume(
+                    _body, headers=properties.headers or {},
+                    properties=properties, method=method)
 
         self.pool.spawn(_wrapper)
         self.logger.debug('Gevent pool_size: %s', len(self.pool))
@@ -121,7 +123,9 @@ class SyncWorker(BaseWorker):
                     )
                     raise
 
-            self.consumer.consume(body, headers=properties.headers or {}, properties=properties, method=method)
+            self.consumer.consume(
+                body, headers=properties.headers or {},
+                properties=properties, method=method)
 
     def is_running(self):
         return False
