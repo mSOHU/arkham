@@ -6,7 +6,7 @@
 @date: 10/21/2015 9:12 AM
 """
 
-__version__ = '0.6.5'
+__version__ = '0.6.6'
 
 from arkham.service import PublishService, SubscribeService, ArkhamService
 from arkham.consumer.consumer import ArkhamConsumer
